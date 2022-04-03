@@ -1560,8 +1560,25 @@ static bool ts_parser__advance(
         );
       }
 
-      // Get the parse table entry for this same lookahead token in the new
-      // state after the reduction.
+      continue;
+    }
+
+    // If the current lookahead token is not valid and the parser is already in
+    // the error state, restart the error recovery process.
+    // TODO - can this be unified with the other `RECOVER` case above?
+    if (state == ERROR_STATE) {
+      ts_parser__recover(self, version, lookahead);
+      return true;
+    }
+
+    // If the current lookahead token is a keyword that is not valid, but the
+    // default word token *is* valid, then treat the lookahead token as word
+    // token instead.
+    if (
+      ts_subtree_is_keyword(lookahead) &&
+      ts_subtree_symbol(lookahead) != self->language->keyword_capture_token &&
+      !ts_language_is_reserved_word(self->language, state, ts_subtree_symbol(lookahead))
+    ) {
       ts_language_table_entry(
         self->language,
         state,
@@ -1608,19 +1625,10 @@ static bool ts_parser__advance(
       return true;
     }
 
-    // If the current lookahead token is not valid and the parser is
-    // already in the error state, restart the error recovery process.
-    // TODO - can this be unified with the other `RECOVER` case above?
-    if (state == ERROR_STATE) {
-      ts_parser__recover(self, version, lookahead);
-      return true;
-    }
-
-    // If the current lookahead token is not valid and the previous
-    // subtree on the stack was reused from an old tree, it isn't actually
-    // valid to reuse it. Remove it from the stack, and in its place,
-    // push each of its children. Then try again to process the current
-    // lookahead.
+    // If the current lookahead token is not valid and the previous subtree on
+    // the stack was reused from an old tree, then it wasn't actually valid to
+    // reuse that previous subtree. Remove it from the stack, and in its place,
+    // push each of its children. Then try again to process the current lookahead.
     if (ts_parser__breakdown_top_of_stack(self, version)) {
       state = ts_stack_state(self->stack, version);
       ts_subtree_release(&self->tree_pool, lookahead);
@@ -1628,11 +1636,11 @@ static bool ts_parser__advance(
       continue;
     }
 
-    // At this point, the current lookahead token is definitely not valid
-    // for this parse stack version. Mark this version as paused and continue
-    // processing any other stack versions that might exist. If some other
-    // version advances successfully, then this version can simply be removed.
-    // But if all versions end up paused, then error recovery is needed.
+    // Otherwise, there is definitely an error in this version of the parse stack.
+    // Mark this version as paused and continue processing any other stack
+    // versions that exist. If some other version advances successfully, then
+    // this version can simply be removed. But if all versions end up paused,
+    // then error recovery is needed.
     LOG("detect_error");
     ts_stack_pause(self->stack, version, lookahead);
     return true;
