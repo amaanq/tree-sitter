@@ -89,14 +89,11 @@ fn test_tree_edit() {
         let child2 = expr.child(1).unwrap();
 
         assert!(expr.has_changes());
-        assert_eq!(expr.start_byte(), 4);
-        assert_eq!(expr.end_byte(), 17);
+        assert_eq!(expr.byte_range(), 4..17);
         assert!(child1.has_changes());
-        assert_eq!(child1.start_byte(), 4);
-        assert_eq!(child1.end_byte(), 7);
+        assert_eq!(child1.byte_range(), 4..7);
         assert!(!child2.has_changes());
-        assert_eq!(child2.start_byte(), 9);
-        assert_eq!(child2.end_byte(), 12);
+        assert_eq!(child2.byte_range(), 9..12);
     }
 
     // replacement starting at the edge of the tree's padding:
@@ -117,14 +114,11 @@ fn test_tree_edit() {
         let child2 = expr.child(1).unwrap();
 
         assert!(expr.has_changes());
-        assert_eq!(expr.start_byte(), 4);
-        assert_eq!(expr.end_byte(), 17);
+        assert_eq!(expr.byte_range(), 4..17);
         assert!(child1.has_changes());
-        assert_eq!(child1.start_byte(), 4);
-        assert_eq!(child1.end_byte(), 7);
+        assert_eq!(child1.byte_range(), 4..7);
         assert!(!child2.has_changes());
-        assert_eq!(child2.start_byte(), 9);
-        assert_eq!(child2.end_byte(), 12);
+        assert_eq!(child2.byte_range(), 9..12);
     }
 
     // deletion that spans more than one child node:
@@ -146,17 +140,13 @@ fn test_tree_edit() {
         let child3 = expr.child(2).unwrap();
 
         assert!(expr.has_changes());
-        assert_eq!(expr.start_byte(), 4);
-        assert_eq!(expr.end_byte(), 8);
+        assert_eq!(expr.byte_range(), 4..8);
         assert!(child1.has_changes());
-        assert_eq!(child1.start_byte(), 4);
-        assert_eq!(child1.end_byte(), 4);
+        assert_eq!(child1.byte_range(), 4..4);
         assert!(child2.has_changes());
-        assert_eq!(child2.start_byte(), 4);
-        assert_eq!(child2.end_byte(), 4);
+        assert_eq!(child2.byte_range(), 4..4);
         assert!(child3.has_changes());
-        assert_eq!(child3.start_byte(), 5);
-        assert_eq!(child3.end_byte(), 8);
+        assert_eq!(child3.byte_range(), 5..8);
     }
 
     // insertion at the end of the tree:
@@ -178,15 +168,133 @@ fn test_tree_edit() {
         let child3 = expr.child(2).unwrap();
 
         assert!(expr.has_changes());
-        assert_eq!(expr.start_byte(), 2);
-        assert_eq!(expr.end_byte(), 16);
+        assert_eq!(expr.byte_range(), 2..16);
         assert!(!child1.has_changes());
-        assert_eq!(child1.end_byte(), 5);
+        assert_eq!(child1.byte_range(), 2..5);
         assert!(!child2.has_changes());
-        assert_eq!(child2.end_byte(), 10);
+        assert_eq!(child2.byte_range(), 7..10);
         assert!(child3.has_changes());
-        assert_eq!(child3.end_byte(), 16);
+        assert_eq!(child3.byte_range(), 12..16);
     }
+
+    // replacement that starts within a token and extends beyond the end of the tree:
+    // resize the token and empty out any subsequent child nodes.
+    {
+        let mut tree = tree.clone();
+        tree.edit(&InputEdit {
+            start_byte: 3,
+            old_end_byte: 90,
+            new_end_byte: 4,
+            start_position: Point::new(0, 3),
+            old_end_position: Point::new(0, 90),
+            new_end_position: Point::new(0, 4),
+        });
+
+        let expr = tree.root_node().child(0).unwrap().child(0).unwrap();
+        let child1 = expr.child(0).unwrap();
+        let child2 = expr.child(1).unwrap();
+        let child3 = expr.child(2).unwrap();
+        assert_eq!(expr.byte_range(), 2..4);
+        assert!(expr.has_changes());
+        assert_eq!(child1.byte_range(), 2..4);
+        assert!(child1.has_changes());
+        assert_eq!(child2.byte_range(), 4..4);
+        assert!(child2.has_changes());
+        assert_eq!(child3.byte_range(), 4..4);
+        assert!(child3.has_changes());
+    }
+
+    // replacement that starts in whitespace and extends beyond the end of the tree:
+    // shift the token's start position and empty out its content.
+    {
+        let mut tree = tree.clone();
+        tree.edit(&InputEdit {
+            start_byte: 6,
+            old_end_byte: 90,
+            new_end_byte: 8,
+            start_position: Point::new(0, 6),
+            old_end_position: Point::new(0, 90),
+            new_end_position: Point::new(0, 8),
+        });
+
+        let expr = tree.root_node().child(0).unwrap().child(0).unwrap();
+        let child1 = expr.child(0).unwrap();
+        let child2 = expr.child(1).unwrap();
+        let child3 = expr.child(2).unwrap();
+        assert_eq!(expr.byte_range(), 2..8);
+        assert!(expr.has_changes());
+        assert_eq!(child1.byte_range(), 2..5);
+        assert!(!child1.has_changes());
+        assert_eq!(child2.byte_range(), 8..8);
+        assert!(child2.has_changes());
+        assert_eq!(child3.byte_range(), 8..8);
+        assert!(child3.has_changes());
+    }
+}
+
+#[test]
+fn test_tree_edit_with_included_ranges() {
+    let mut parser = Parser::new();
+    parser.set_language(get_language("html")).unwrap();
+
+    let source = "<div><% if a %><span>a</span><% else %><span>b</span><% end %></div>";
+
+    let ranges = [0..5, 15..29, 39..53, 62..68];
+
+    parser
+        .set_included_ranges(
+            &ranges
+                .iter()
+                .map(|range| Range {
+                    start_byte: range.start,
+                    end_byte: range.end,
+                    start_point: Point::new(0, range.start),
+                    end_point: Point::new(0, range.end),
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+    let mut tree = parser.parse(source, None).unwrap();
+
+    tree.edit(&InputEdit {
+        start_byte: 29,
+        old_end_byte: 53,
+        new_end_byte: 29,
+        start_position: Point::new(0, 29),
+        old_end_position: Point::new(0, 53),
+        new_end_position: Point::new(0, 29),
+    });
+
+    assert_eq!(
+        tree.included_ranges(),
+        &[
+            Range {
+                start_byte: 0,
+                end_byte: 5,
+                start_point: Point::new(0, 0),
+                end_point: Point::new(0, 5),
+            },
+            Range {
+                start_byte: 15,
+                end_byte: 29,
+                start_point: Point::new(0, 15),
+                end_point: Point::new(0, 29),
+            },
+            Range {
+                start_byte: 29,
+                end_byte: 29,
+                start_point: Point::new(0, 29),
+                end_point: Point::new(0, 29),
+            },
+            Range {
+                start_byte: 38,
+                end_byte: 44,
+                start_point: Point::new(0, 38),
+                end_point: Point::new(0, 44),
+            }
+        ]
+    );
 }
 
 #[test]
@@ -198,7 +306,7 @@ fn test_tree_cursor() {
         .parse(
             "
                 struct Stuff {
-                    a: A;
+                    a: A,
                     b: Option<B>,
                 }
             ",
@@ -223,6 +331,49 @@ fn test_tree_cursor() {
     assert!(cursor.goto_next_sibling());
     assert_eq!(cursor.node().kind(), "field_declaration_list");
     assert_eq!(cursor.node().is_named(), true);
+
+    assert!(cursor.goto_last_child());
+    assert_eq!(cursor.node().kind(), "}");
+    assert_eq!(cursor.node().is_named(), false);
+    assert_eq!(cursor.node().start_position(), Point { row: 4, column: 16 });
+
+    assert!(cursor.goto_previous_sibling());
+    assert_eq!(cursor.node().kind(), ",");
+    assert_eq!(cursor.node().is_named(), false);
+    assert_eq!(cursor.node().start_position(), Point { row: 3, column: 32 });
+
+    assert!(cursor.goto_previous_sibling());
+    assert_eq!(cursor.node().kind(), "field_declaration");
+    assert_eq!(cursor.node().is_named(), true);
+    assert_eq!(cursor.node().start_position(), Point { row: 3, column: 20 });
+
+    assert!(cursor.goto_previous_sibling());
+    assert_eq!(cursor.node().kind(), ",");
+    assert_eq!(cursor.node().is_named(), false);
+    assert_eq!(cursor.node().start_position(), Point { row: 2, column: 24 });
+
+    assert!(cursor.goto_previous_sibling());
+    assert_eq!(cursor.node().kind(), "field_declaration");
+    assert_eq!(cursor.node().is_named(), true);
+    assert_eq!(cursor.node().start_position(), Point { row: 2, column: 20 });
+
+    assert!(cursor.goto_previous_sibling());
+    assert_eq!(cursor.node().kind(), "{");
+    assert_eq!(cursor.node().is_named(), false);
+    assert_eq!(cursor.node().start_position(), Point { row: 1, column: 29 });
+
+    let mut copy = tree.walk();
+    copy.reset_to(cursor);
+
+    assert_eq!(copy.node().kind(), "{");
+    assert_eq!(copy.node().is_named(), false);
+
+    assert!(copy.goto_parent());
+    assert_eq!(copy.node().kind(), "field_declaration_list");
+    assert_eq!(copy.node().is_named(), true);
+
+    assert!(copy.goto_parent());
+    assert_eq!(copy.node().kind(), "struct_item");
 }
 
 #[test]

@@ -13,6 +13,7 @@ use std::{
     thread, time,
 };
 use tree_sitter::{IncludedRangesError, InputEdit, LogType, Parser, Point, Range};
+use tree_sitter_proc_macro::retry;
 
 #[test]
 fn test_parsing_simple_string() {
@@ -275,7 +276,10 @@ fn test_parsing_invalid_chars_at_eof() {
     let mut parser = Parser::new();
     parser.set_language(get_language("json")).unwrap();
     let tree = parser.parse(b"\xdf", None).unwrap();
-    assert_eq!(tree.root_node().to_sexp(), "(ERROR (UNEXPECTED INVALID))");
+    assert_eq!(
+        tree.root_node().to_sexp(),
+        "(document (ERROR (UNEXPECTED INVALID)))"
+    );
 }
 
 #[test]
@@ -505,13 +509,13 @@ fn test_parsing_after_detecting_error_in_the_middle_of_a_string_token() {
     let tree = parser.parse(&source, None).unwrap();
     assert_eq!(
         tree.root_node().to_sexp(),
-        "(module (expression_statement (assignment left: (identifier) right: (expression_list (identifier) (string)))))"
+        "(module (expression_statement (assignment left: (identifier) right: (expression_list (identifier) (string (string_start) (string_content) (string_end))))))"
     );
 
     // Delete a suffix of the source code, starting in the middle of the string
     // literal, after some whitespace. With this deletion, the remaining string
     // content: "c, " looks like two valid python tokens: an identifier and a comma.
-    // When this edit is undone, in order correctly recover the orginal tree, the
+    // When this edit is undone, in order correctly recover the original tree, the
     // parser needs to remember that before matching the `c` as an identifier, it
     // lookahead ahead several bytes, trying to find the closing quotation mark in
     // order to match the "string content" node.
@@ -638,6 +642,7 @@ fn test_parsing_cancelled_by_another_thread() {
 // Timeouts
 
 #[test]
+#[retry(10)]
 fn test_parsing_with_a_timeout() {
     let mut parser = Parser::new();
     parser.set_language(get_language("json")).unwrap();
@@ -656,7 +661,11 @@ fn test_parsing_with_a_timeout() {
         None,
     );
     assert!(tree.is_none());
+    #[cfg(not(target_arch = "sparc64"))]
     assert!(start_time.elapsed().as_micros() < 2000);
+
+    #[cfg(target_arch = "sparc64")]
+    assert!(start_time.elapsed().as_micros() < 8000);
 
     // Continue parsing, but pause after 1 ms of processing.
     parser.set_timeout_micros(5000);
@@ -695,6 +704,7 @@ fn test_parsing_with_a_timeout() {
 }
 
 #[test]
+#[retry(10)]
 fn test_parsing_with_a_timeout_and_a_reset() {
     let mut parser = Parser::new();
     parser.set_language(get_language("json")).unwrap();
@@ -750,6 +760,7 @@ fn test_parsing_with_a_timeout_and_a_reset() {
 }
 
 #[test]
+#[retry(10)]
 fn test_parsing_with_a_timeout_and_implicit_reset() {
     allocations::record(|| {
         let mut parser = Parser::new();
@@ -783,6 +794,7 @@ fn test_parsing_with_a_timeout_and_implicit_reset() {
 }
 
 #[test]
+#[retry(10)]
 fn test_parsing_with_timeout_and_no_completion() {
     allocations::record(|| {
         let mut parser = Parser::new();
@@ -829,6 +841,7 @@ fn test_parsing_with_one_included_range() {
         js_tree.root_node().start_position(),
         Point::new(0, source_code.find("console").unwrap())
     );
+    assert_eq!(js_tree.included_ranges(), &[script_content_node.range()]);
 }
 
 #[test]
@@ -853,28 +866,27 @@ fn test_parsing_with_multiple_included_ranges() {
     let close_quote_node = template_string_node.child(3).unwrap();
 
     parser.set_language(get_language("html")).unwrap();
-    parser
-        .set_included_ranges(&[
-            Range {
-                start_byte: open_quote_node.end_byte(),
-                start_point: open_quote_node.end_position(),
-                end_byte: interpolation_node1.start_byte(),
-                end_point: interpolation_node1.start_position(),
-            },
-            Range {
-                start_byte: interpolation_node1.end_byte(),
-                start_point: interpolation_node1.end_position(),
-                end_byte: interpolation_node2.start_byte(),
-                end_point: interpolation_node2.start_position(),
-            },
-            Range {
-                start_byte: interpolation_node2.end_byte(),
-                start_point: interpolation_node2.end_position(),
-                end_byte: close_quote_node.start_byte(),
-                end_point: close_quote_node.start_position(),
-            },
-        ])
-        .unwrap();
+    let html_ranges = &[
+        Range {
+            start_byte: open_quote_node.end_byte(),
+            start_point: open_quote_node.end_position(),
+            end_byte: interpolation_node1.start_byte(),
+            end_point: interpolation_node1.start_position(),
+        },
+        Range {
+            start_byte: interpolation_node1.end_byte(),
+            start_point: interpolation_node1.end_position(),
+            end_byte: interpolation_node2.start_byte(),
+            end_point: interpolation_node2.start_position(),
+        },
+        Range {
+            start_byte: interpolation_node2.end_byte(),
+            start_point: interpolation_node2.end_position(),
+            end_byte: close_quote_node.start_byte(),
+            end_point: close_quote_node.start_position(),
+        },
+    ];
+    parser.set_included_ranges(html_ranges).unwrap();
     let html_tree = parser.parse(source_code, None).unwrap();
 
     assert_eq!(
@@ -888,6 +900,7 @@ fn test_parsing_with_multiple_included_ranges() {
             " (end_tag (tag_name))))",
         )
     );
+    assert_eq!(html_tree.included_ranges(), html_ranges);
 
     let div_element_node = html_tree.root_node().child(0).unwrap();
     let hello_text_node = div_element_node.child(1).unwrap();
@@ -950,7 +963,9 @@ fn test_parsing_with_included_range_containing_mismatched_positions() {
 
     parser.set_included_ranges(&[range_to_parse]).unwrap();
 
-    let html_tree = parser.parse(source_code, None).unwrap();
+    let html_tree = parser
+        .parse_with(&mut chunked_input(source_code, 3), None)
+        .unwrap();
 
     assert_eq!(html_tree.root_node().range(), range_to_parse);
 
@@ -1077,7 +1092,9 @@ fn test_parsing_with_a_newly_excluded_range() {
     // Parse HTML including the template directive, which will cause an error
     let mut parser = Parser::new();
     parser.set_language(get_language("html")).unwrap();
-    let mut first_tree = parser.parse(&source_code, None).unwrap();
+    let mut first_tree = parser
+        .parse_with(&mut chunked_input(&source_code, 3), None)
+        .unwrap();
 
     // Insert code at the beginning of the document.
     let prefix = "a very very long line of plain text. ";
@@ -1112,7 +1129,9 @@ fn test_parsing_with_a_newly_excluded_range() {
             },
         ])
         .unwrap();
-    let tree = parser.parse(&source_code, Some(&first_tree)).unwrap();
+    let tree = parser
+        .parse_with(&mut chunked_input(&source_code, 3), Some(&first_tree))
+        .unwrap();
 
     assert_eq!(
         tree.root_node().to_sexp(),
@@ -1163,7 +1182,9 @@ fn test_parsing_with_a_newly_included_range() {
     parser
         .set_included_ranges(&[simple_range(range1_start, range1_end)])
         .unwrap();
-    let tree = parser.parse(source_code, None).unwrap();
+    let tree = parser
+        .parse_with(&mut chunked_input(&source_code, 3), None)
+        .unwrap();
     assert_eq!(
         tree.root_node().to_sexp(),
         concat!(
@@ -1180,7 +1201,9 @@ fn test_parsing_with_a_newly_included_range() {
             simple_range(range3_start, range3_end),
         ])
         .unwrap();
-    let tree2 = parser.parse(&source_code, Some(&tree)).unwrap();
+    let tree2 = parser
+        .parse_with(&mut chunked_input(&source_code, 3), Some(&tree))
+        .unwrap();
     assert_eq!(
         tree2.root_node().to_sexp(),
         concat!(
@@ -1280,6 +1303,85 @@ fn test_parsing_with_included_ranges_and_missing_tokens() {
     assert_eq!(root.child(3).unwrap().start_byte(), 4);
 }
 
+#[test]
+fn test_grammars_that_can_hang_on_eof() {
+    let (parser_name, parser_code) = generate_parser_for_grammar(
+        r#"
+        {
+            "name": "test_single_null_char_regex",
+            "rules": {
+                "source_file": {
+                    "type": "SEQ",
+                    "members": [
+                        { "type": "STRING", "value": "\"" },
+                        { "type": "PATTERN", "value": "[\\x00]*" },
+                        { "type": "STRING", "value": "\"" }
+                    ]
+                }
+            },
+            "extras": [ { "type": "PATTERN", "value": "\\s" } ]
+        }
+        "#,
+    )
+    .unwrap();
+
+    let mut parser = Parser::new();
+    parser
+        .set_language(get_test_language(&parser_name, &parser_code, None))
+        .unwrap();
+    parser.parse("\"", None).unwrap();
+
+    let (parser_name, parser_code) = generate_parser_for_grammar(
+        r#"
+        {
+            "name": "test_null_char_with_next_char_regex",
+            "rules": {
+                "source_file": {
+                    "type": "SEQ",
+                    "members": [
+                        { "type": "STRING", "value": "\"" },
+                        { "type": "PATTERN", "value": "[\\x00-\\x01]*" },
+                        { "type": "STRING", "value": "\"" }
+                    ]
+                }
+            },
+            "extras": [ { "type": "PATTERN", "value": "\\s" } ]
+        }
+        "#,
+    )
+    .unwrap();
+
+    parser
+        .set_language(get_test_language(&parser_name, &parser_code, None))
+        .unwrap();
+    parser.parse("\"", None).unwrap();
+
+    let (parser_name, parser_code) = generate_parser_for_grammar(
+        r#"
+        {
+            "name": "test_null_char_with_range_regex",
+            "rules": {
+                "source_file": {
+                    "type": "SEQ",
+                    "members": [
+                        { "type": "STRING", "value": "\"" },
+                        { "type": "PATTERN", "value": "[\\x00-\\x7F]*" },
+                        { "type": "STRING", "value": "\"" }
+                    ]
+                }
+            },
+            "extras": [ { "type": "PATTERN", "value": "\\s" } ]
+        }
+        "#,
+    )
+    .unwrap();
+
+    parser
+        .set_language(get_test_language(&parser_name, &parser_code, None))
+        .unwrap();
+    parser.parse("\"", None).unwrap();
+}
+
 fn simple_range(start: usize, end: usize) -> Range {
     Range {
         start_byte: start,
@@ -1287,4 +1389,8 @@ fn simple_range(start: usize, end: usize) -> Range {
         start_point: Point::new(0, start),
         end_point: Point::new(0, end),
     }
+}
+
+fn chunked_input<'a>(text: &'a str, size: usize) -> impl FnMut(usize, Point) -> &'a [u8] {
+    move |offset, _| text[offset..text.len().min(offset + size)].as_bytes()
 }

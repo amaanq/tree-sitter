@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 use std::time::SystemTime;
-use std::{fs, mem};
+use std::{env, fs, mem};
 use tree_sitter::{Language, QueryError, QueryErrorKind};
 use tree_sitter_highlight::HighlightConfiguration;
 use tree_sitter_tags::{Error as TagsError, TagsConfiguration};
@@ -108,9 +108,13 @@ unsafe impl Sync for Loader {}
 
 impl Loader {
     pub fn new() -> Result<Self> {
-        let parser_lib_path = dirs::cache_dir()
-            .ok_or(anyhow!("Cannot determine cache directory"))?
-            .join("tree-sitter/lib");
+        let parser_lib_path = match env::var("TREE_SITTER_LIBDIR") {
+            Ok(path) => PathBuf::from(path),
+            _ => dirs::cache_dir()
+                .ok_or(anyhow!("Cannot determine cache directory"))?
+                .join("tree-sitter")
+                .join("lib"),
+        };
         Ok(Self::with_parser_lib_path(parser_lib_path))
     }
 
@@ -366,14 +370,15 @@ impl Loader {
                 .opt_level(2)
                 .cargo_metadata(false)
                 .target(BUILD_TARGET)
-                .host(BUILD_TARGET);
+                .host(BUILD_TARGET)
+                .flag_if_supported("-Werror=implicit-function-declaration");
             let compiler = config.get_compiler();
             let mut command = Command::new(compiler.path());
             for (key, value) in compiler.env() {
                 command.env(key, value);
             }
 
-            if cfg!(windows) {
+            if compiler.is_like_msvc() {
                 command.args(&["/nologo", "/LD", "/I"]).arg(header_path);
                 if self.debug_build {
                     command.arg("/Od");
@@ -390,13 +395,16 @@ impl Loader {
             } else {
                 command
                     .arg("-shared")
-                    .arg("-fPIC")
                     .arg("-fno-exceptions")
                     .arg("-g")
                     .arg("-I")
                     .arg(header_path)
                     .arg("-o")
                     .arg(&library_path);
+
+                if !cfg!(windows) {
+                    command.arg("-fPIC");
+                }
 
                 if self.debug_build {
                     command.arg("-O0");
@@ -774,7 +782,7 @@ impl<'a> LanguageConfiguration<'a> {
         let (path, range) = ranges
             .iter()
             .find(|(_, range)| range.contains(&offset_within_section))
-            .unwrap();
+            .unwrap_or(ranges.last().unwrap());
         error.offset = offset_within_section - range.start;
         error.row = source[range.start..offset_within_section]
             .chars()

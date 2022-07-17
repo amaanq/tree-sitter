@@ -59,6 +59,7 @@ struct ParseTableBuilder<'a> {
     parse_state_info_by_id: Vec<ParseStateInfo<'a>>,
     parse_state_queue: VecDeque<ParseStateQueueEntry>,
     non_terminal_extra_states: Vec<(Symbol, usize)>,
+    actual_conflicts: HashSet<Vec<Symbol>>,
     parse_table: ParseTable,
 }
 
@@ -153,6 +154,20 @@ impl<'a> ParseTableBuilder<'a> {
                 entry.state_id,
                 item_set,
             )?;
+        }
+
+        if !self.actual_conflicts.is_empty() {
+            println!("Warning: unnecessary conflicts");
+            for conflict in &self.actual_conflicts {
+                println!(
+                    "  {}",
+                    conflict
+                        .iter()
+                        .map(|symbol| format!("`{}`", self.symbol_name(symbol)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
         }
 
         Ok((self.parse_table, self.parse_state_info_by_id))
@@ -634,6 +649,7 @@ impl<'a> ParseTableBuilder<'a> {
             .expected_conflicts
             .contains(&actual_conflict)
         {
+            self.actual_conflicts.remove(&actual_conflict);
             return Ok(());
         }
 
@@ -650,7 +666,7 @@ impl<'a> ParseTableBuilder<'a> {
         .unwrap();
         write!(&mut msg, "Possible interpretations:\n\n").unwrap();
 
-        let mut interpretions = conflicting_items
+        let mut interpretations = conflicting_items
             .iter()
             .map(|item| {
                 let mut line = String::new();
@@ -704,13 +720,13 @@ impl<'a> ParseTableBuilder<'a> {
             })
             .collect::<Vec<_>>();
 
-        let max_interpretation_length = interpretions
+        let max_interpretation_length = interpretations
             .iter()
             .map(|i| i.0.chars().count())
             .max()
             .unwrap();
-        interpretions.sort_unstable();
-        for (i, (line, prec_suffix)) in interpretions.into_iter().enumerate() {
+        interpretations.sort_unstable();
+        for (i, (line, prec_suffix)) in interpretations.into_iter().enumerate() {
             write!(&mut msg, "  {}:", i + 1).unwrap();
             msg += &line;
             if let Some(prec_suffix) = prec_suffix {
