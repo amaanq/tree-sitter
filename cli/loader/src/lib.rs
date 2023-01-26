@@ -4,6 +4,7 @@ use once_cell::unsync::OnceCell;
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::io::BufReader;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -337,11 +338,26 @@ impl Loader {
             }
         };
 
+        let mut lib_name = None;
+        if let Some(src_folder_name) = src_path
+            .parent()
+            .unwrap()
+            .file_name()
+            .map(OsStr::to_str)
+            .flatten()
+        {
+            let origin = format!("tree-sitter-{}", grammar_json.name);
+            if src_folder_name != origin {
+                lib_name = Some(src_folder_name);
+            }
+        }
+
         self.load_language_from_sources(
             &grammar_json.name,
             &header_path,
             &parser_path,
             &scanner_path,
+            &lib_name,
         )
     }
 
@@ -351,13 +367,18 @@ impl Loader {
         header_path: &Path,
         parser_path: &Path,
         scanner_path: &Option<PathBuf>,
+        lib_name: &Option<&str>,
     ) -> Result<Language> {
-        let mut lib_name = name.to_string();
+        let mut lib_name = lib_name.or(Some(name)).unwrap().to_string();
+
         if self.debug_build {
-            lib_name.push_str(".debug._");
+            lib_name.push_str(".debug");
         }
-        let mut library_path = self.parser_lib_path.join(lib_name);
-        library_path.set_extension(DYLIB_EXTENSION);
+
+        lib_name.push('.');
+        lib_name.push_str(DYLIB_EXTENSION);
+
+        let library_path = self.parser_lib_path.join(lib_name);
 
         let recompile = needs_recompile(&library_path, &parser_path, &scanner_path)
             .with_context(|| "Failed to compare source and binary timestamps")?;
