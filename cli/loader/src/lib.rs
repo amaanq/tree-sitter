@@ -155,7 +155,9 @@ impl Loader {
                 for entry in entries {
                     let entry = entry?;
                     if let Some(parser_dir_name) = entry.file_name().to_str() {
-                        if parser_dir_name.starts_with("tree-sitter-") {
+                        if parser_dir_name.starts_with("tree-sitter-")
+                            && !parser_dir_name.contains(".")
+                        {
                             self.find_language_configurations_at_path(
                                 &parser_container_dir.join(parser_dir_name),
                             )
