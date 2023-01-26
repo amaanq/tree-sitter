@@ -4,13 +4,13 @@ use std::{
     fs,
     io::{self, Write},
     ops::Range,
-    path::Path,
+    path::{Path, PathBuf},
 };
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 
 pub fn query_files_at_paths(
     language: Language,
-    paths: Vec<String>,
+    paths: Vec<PathBuf>,
     query_path: &Path,
     ordered_captures: bool,
     range: Option<Range<usize>>,
@@ -34,7 +34,7 @@ pub fn query_files_at_paths(
     for path in paths {
         let mut results = Vec::new();
 
-        writeln!(&mut stdout, "{}", path)?;
+        writeln!(&mut stdout, "{}", path.to_string_lossy())?;
 
         let source_code =
             fs::read(&path).with_context(|| format!("Error reading source file {:?}", path))?;

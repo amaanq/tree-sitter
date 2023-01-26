@@ -12,5 +12,9 @@ pub mod test_tags;
 pub mod util;
 pub mod wasm;
 
+pub mod input;
+pub mod render;
+pub mod visitor;
+
 #[cfg(test)]
 mod tests;

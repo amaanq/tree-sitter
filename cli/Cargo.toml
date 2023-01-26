@@ -1,7 +1,7 @@
 [package]
 name = "tree-sitter-cli"
 description = "CLI tool for developing, testing, and using Tree-sitter parsers"
-version = "0.20.7"
+version = "0.21.0-alpha.1"
 authors = ["Max Brunsfeld <maxbrunsfeld@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -19,60 +19,40 @@ name = "benchmark"
 harness = false
 
 [dependencies]
+tree-sitter = { path = "../lib", version = "0.21.0-alpha.1" }
+tree-sitter-config = { path = "config", version = "0.21.0-alpha.1" }
+tree-sitter-loader = { path = "loader", version = "0.21.0-alpha.1" }
+tree-sitter-highlight = { path = "../highlight", version = "0.21.0-alpha.1" }
+tree-sitter-tags = { path = "../tags", version = "0.21.0-alpha.1" }
+
 ansi_term = "0.12"
 anyhow = "1.0"
 atty = "0.2"
-clap = "2.32"
+clap = { version = "4.1", features = ["env", "string", "wrap_help"] }
 difference = "2.0"
-dirs = "3.0"
-glob = "0.3.0"
-html-escape = "0.2.6"
-indexmap = "1"
-lazy_static = "1.2.0"
-regex = "1"
-regex-syntax = "0.6.4"
+dirs = "4.0"
+glob = "0.3"
+html-escape = "0.2"
+indexmap = "1.9"
+lazy_static = "1.4"
+log = { version = "0.4", features = ["std"] }
+regex = "1.7"
+regex-syntax = "0.6"
 rustc-hash = "1"
 semver = "1.0"
-serde = { version = "1.0.130", features = ["derive"] }
-smallbitvec = "2.5.1"
-tiny_http = "0.12.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+smallbitvec = "2.5"
+tiny_http = "0.12"
 walkdir = "2.3"
-webbrowser = "0.5.1"
-which = "4.1.0"
-
-[dependencies.tree-sitter]
-version = "0.20.3"
-path = "../lib"
-
-[dependencies.tree-sitter-config]
-version = "0.19.0"
-path = "config"
-
-[dependencies.tree-sitter-highlight]
-version = "0.20"
-path = "../highlight"
-
-[dependencies.tree-sitter-loader]
-version = "0.20"
-path = "loader"
-
-[dependencies.tree-sitter-tags]
-version = "0.20"
-path = "../tags"
-
-[dependencies.serde_json]
-version = "1.0"
-features = ["preserve_order"]
-
-[dependencies.log]
-version = "0.4.6"
-features = ["std"]
+webbrowser = "0.8"
+which = "4.4"
 
 [dev-dependencies]
 rand = "0.8"
 tempfile = "3"
-pretty_assertions = "0.7.2"
+pretty_assertions = "1.3"
 ctor = "0.1"
 
 [build-dependencies]
-toml = "0.5"
+toml = "0.6"

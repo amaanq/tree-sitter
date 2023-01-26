@@ -1,11 +1,57 @@
+#![allow(unused_variables, unused_assignments)]
+
 use super::util;
-use anyhow::{anyhow, Context, Result};
+use crate::input::ParserInput;
+use crate::render::{
+    as_u16_slice, collect_node_ids, text_render, xml_render, CstFlags, CstRenderer, Encoding,
+    SExpressionFlags, SExpressionRenderer,
+};
+use crate::visitor::Visitor;
+use anyhow::{anyhow, bail, Result};
 use std::io::{self, Write};
-use std::path::Path;
 use std::sync::atomic::AtomicUsize;
-use std::time::Instant;
-use std::{fmt, fs, usize};
-use tree_sitter::{InputEdit, Language, LogType, Parser, Point, Tree};
+use std::time::{Duration, Instant};
+use std::{fmt, usize};
+use tree_sitter::{InputEdit, LogType, Parser, Point, Tree};
+
+#[derive(Clone, Debug)]
+pub enum OutputFormat {
+    SExpression(SExpressionFlags),
+    Cst(CstFlags),
+    Xml,
+}
+
+impl OutputFormat {
+    pub fn parse(format: &str) -> Result<Self> {
+        let (format, flags) = match format.split_once(':') {
+            Some((format, flags)) => (format, Some(flags)),
+            None => (format, None),
+        };
+        Ok(match format {
+            "s" | "s-expression" => Self::SExpression(SExpressionFlags::parse(flags)?),
+            "c" | "cst" => Self::Cst(CstFlags::parse(flags)?),
+            "x" | "xml" => {
+                if flags.is_some() {
+                    bail!("XML output format doesn't support flags");
+                }
+                Self::Xml
+            }
+            format => {
+                if format.len() > 1 {
+                    let mut format = format.to_owned();
+                    let prefixes = ["s-expression", "cst", "xml"];
+                    if prefixes.iter().any(|s| format.starts_with(s)) {
+                        bail!("Flags should be separated by a colon: `:`")
+                    }
+                    format.insert(1, ':');
+                    Self::parse(format.as_str())?
+                } else {
+                    bail!("Unknown output format: {format}")
+                }
+            }
+        })
+    }
+}
 
 #[derive(Debug)]
 pub struct Edit {
@@ -30,24 +76,21 @@ impl fmt::Display for Stats {
     }
 }
 
-pub fn parse_file_at_path(
-    language: Language,
-    path: &Path,
+pub fn parse_input(
+    mut input: ParserInput,
+    output: Option<&OutputFormat>,
     edits: &Vec<&str>,
-    max_path_length: usize,
-    quiet: bool,
+    apply_edits: bool,
     print_time: bool,
-    timeout: u64,
+    quiet: bool,
     debug: bool,
     debug_graph: bool,
-    debug_xml: bool,
+    timeout: u64,
     cancellation_flag: Option<&AtomicUsize>,
+    max_path_length: usize,
 ) -> Result<bool> {
-    let mut _log_session = None;
     let mut parser = Parser::new();
-    parser.set_language(language)?;
-    let mut source_code =
-        fs::read(path).with_context(|| format!("Error reading source file {:?}", path))?;
+    parser.set_language(input.language)?;
 
     // If the `--cancel` flag was passed, then cancel the parse
     // when the user types a newline.
@@ -58,7 +101,7 @@ pub fn parse_file_at_path(
 
     // Render an HTML graph if `--debug-graph` was passed
     if debug_graph {
-        _log_session = Some(util::log_graphs(&mut parser, "log.html")?);
+        util::log_graphs(&mut parser, "log.html")?;
     }
     // Log to stderr if `--debug` was passed
     else if debug {
@@ -71,141 +114,128 @@ pub fn parse_file_at_path(
     }
 
     let time = Instant::now();
-    let tree = parser.parse(&source_code, None);
 
-    let stdout = io::stdout();
-    let mut stdout = stdout.lock();
+    let (encoding, has_bom) = Encoding::test_bytes(&input.source_code)
+        .map(|x| (x, true))
+        .unwrap_or((Encoding::UTF8, false));
+
+    // let tree = parser.parse(&input.source_code, None);
+
+    let tree = match encoding {
+        Encoding::UTF8 => parser.parse(&input.source_code, None),
+        Encoding::UTF16LE => {
+            let source_code = as_u16_slice(&input.source_code);
+            parser.parse_utf16_le(source_code, None)
+        }
+        Encoding::UTF16BE => {
+            let source_code = as_u16_slice(&input.source_code);
+            parser.parse_utf16_be(source_code, None)
+        }
+    };
+
+    let mut stdout = io::stdout();
 
     if let Some(mut tree) = tree {
-        if debug_graph && !edits.is_empty() {
-            println!("BEFORE:\n{}", String::from_utf8_lossy(&source_code));
-        }
+        let node_ids = if apply_edits {
+            Some(collect_node_ids(&mut tree))
+        } else {
+            None
+        };
 
-        for (i, edit) in edits.iter().enumerate() {
-            let edit = parse_edit_flag(&source_code, edit)?;
-            perform_edit(&mut tree, &mut source_code, &edit);
-            tree = parser.parse(&source_code, Some(&tree)).unwrap();
-
+        if !edits.is_empty() {
             if debug_graph {
-                println!("AFTER {}:\n{}", i, String::from_utf8_lossy(&source_code));
+                println!("BEFORE:\n{}", String::from_utf8_lossy(&input.source_code));
+            }
+
+            let mut i = 0;
+            let mut edits = edits.iter();
+            while let Some(position) = edits.next() {
+                let deleted_length = edits.next().unwrap();
+                let inserted_text = edits.next().unwrap();
+                let edit = create_edit(
+                    &input.source_code,
+                    *position,
+                    *deleted_length,
+                    *inserted_text,
+                )?;
+                perform_edit(&mut tree, &mut input.source_code, &edit);
+                if debug_graph {
+                    i += 1;
+                    println!(
+                        "AFTER {}:\n{}",
+                        i,
+                        String::from_utf8_lossy(&input.source_code)
+                    );
+                }
+            }
+            if apply_edits {
+                tree = parser.parse(&input.source_code, Some(&tree)).unwrap();
             }
         }
-
         let duration = time.elapsed();
         let duration_ms = duration.as_secs() * 1000 + duration.subsec_nanos() as u64 / 1000000;
         let mut cursor = tree.walk();
 
+        let mut cst_output = false;
         if !quiet {
-            let mut needs_newline = false;
-            let mut indent_level = 0;
-            let mut did_visit_children = false;
-            loop {
-                let node = cursor.node();
-                let is_named = node.is_named();
-                if did_visit_children {
-                    if is_named {
-                        stdout.write(b")")?;
-                        needs_newline = true;
-                    }
-                    if cursor.goto_next_sibling() {
-                        did_visit_children = false;
-                    } else if cursor.goto_parent() {
-                        did_visit_children = true;
-                        indent_level -= 1;
-                    } else {
-                        break;
-                    }
+            fn timeit<T>(mut func: impl FnMut() -> Result<T>) -> Result<(T, Duration)> {
+                let time = Instant::now();
+                let result = func()?;
+                Ok((result, time.elapsed()))
+            }
+            fn render_timing<T>(mut func: impl FnMut() -> Result<T>, time_it: bool) -> Result<()> {
+                if time_it {
+                    let (_, duration) = timeit(func)?;
+                    eprintln!("\n--- rendered: {:?}", duration);
                 } else {
-                    if is_named {
-                        if needs_newline {
-                            stdout.write(b"\n")?;
-                        }
-                        for _ in 0..indent_level {
-                            stdout.write(b"  ")?;
-                        }
-                        let start = node.start_position();
-                        let end = node.end_position();
-                        if let Some(field_name) = cursor.field_name() {
-                            write!(&mut stdout, "{}: ", field_name)?;
-                        }
-                        write!(
-                            &mut stdout,
-                            "({} [{}, {}] - [{}, {}]",
-                            node.kind(),
-                            start.row,
-                            start.column,
-                            end.row,
-                            end.column
-                        )?;
-                        needs_newline = true;
-                    }
-                    if cursor.goto_first_child() {
-                        did_visit_children = false;
-                        indent_level += 1;
-                    } else {
-                        did_visit_children = true;
-                    }
+                    func()?;
+                }
+                Ok(())
+            }
+
+            #[cfg(not(unix))]
+            let mut stdout = stdout.lock();
+            #[cfg(unix)]
+            let mut stdout: fast_stdout::FastStdout = stdout.lock().into();
+
+            let mut text_flags = Default::default();
+            match output {
+                None => {
+                    let flags = SExpressionFlags::default();
+                    SExpressionRenderer::new(&mut stdout, &flags).perform(cursor.clone())?;
+                }
+                Some(OutputFormat::SExpression(flags)) => {
+                    text_flags = flags.text.clone();
+                    let func =
+                        || SExpressionRenderer::new(&mut stdout, flags).perform(cursor.clone());
+                    render_timing(func, flags.extra.render_timing)?;
+                }
+                Some(OutputFormat::Cst(flags)) => {
+                    text_flags = flags.text.clone();
+                    cst_output = true;
+                    let func = || {
+                        CstRenderer::new(&mut stdout, &input.source_code, flags)
+                            .original_nodes(&node_ids)
+                            .encoding(encoding)
+                            .perform(cursor.clone())
+                    };
+                    render_timing(func, flags.extra.render_timing)?;
+                }
+                Some(OutputFormat::Xml) => {
+                    xml_render(&mut stdout, &mut cursor, &input.source_code)?;
                 }
             }
-            cursor.reset(tree.root_node());
-            println!("");
-        }
-
-        if debug_xml {
-            let mut needs_newline = false;
-            let mut indent_level = 0;
-            let mut did_visit_children = false;
-            let mut tags: Vec<&str> = Vec::new();
-            loop {
-                let node = cursor.node();
-                let is_named = node.is_named();
-                if did_visit_children {
-                    if is_named {
-                        let tag = tags.pop();
-                        write!(&mut stdout, "</{}>\n", tag.expect("there is a tag"))?;
-                        needs_newline = true;
-                    }
-                    if cursor.goto_next_sibling() {
-                        did_visit_children = false;
-                    } else if cursor.goto_parent() {
-                        did_visit_children = true;
-                        indent_level -= 1;
-                    } else {
-                        break;
-                    }
+            if text_flags.show {
+                let source_code = if has_bom {
+                    &input.source_code[encoding.bom().len()..]
                 } else {
-                    if is_named {
-                        if needs_newline {
-                            stdout.write(b"\n")?;
-                        }
-                        for _ in 0..indent_level {
-                            stdout.write(b"  ")?;
-                        }
-                        write!(&mut stdout, "<{}", node.kind())?;
-                        if let Some(field_name) = cursor.field_name() {
-                            write!(&mut stdout, " type=\"{}\"", field_name)?;
-                        }
-                        write!(&mut stdout, ">")?;
-                        tags.push(node.kind());
-                        needs_newline = true;
-                    }
-                    if cursor.goto_first_child() {
-                        did_visit_children = false;
-                        indent_level += 1;
-                    } else {
-                        did_visit_children = true;
-                        let start = node.start_byte();
-                        let end = node.end_byte();
-                        let value =
-                            std::str::from_utf8(&source_code[start..end]).expect("has a string");
-                        write!(&mut stdout, "{}", html_escape::encode_text(value))?;
-                    }
-                }
+                    &input.source_code
+                };
+                text_render(&mut stdout, &text_flags, source_code)?;
             }
-            cursor.reset(tree.root_node());
-            println!("");
         }
 
+        let mut stdout = stdout.lock();
         let mut first_error = None;
         loop {
             let node = cursor.node();
@@ -223,11 +253,11 @@ pub fn parse_file_at_path(
             }
         }
 
-        if first_error.is_some() || print_time {
+        if (first_error.is_some() || print_time) && !cst_output {
             write!(
                 &mut stdout,
                 "{:width$}\t{} ms",
-                path.to_str().unwrap(),
+                input.origin.as_str(),
                 duration_ms,
                 width = max_path_length
             )?;
@@ -264,7 +294,7 @@ pub fn parse_file_at_path(
         writeln!(
             &mut stdout,
             "{:width$}\t{} ms (timed out)",
-            path.to_str().unwrap(),
+            input.origin.as_str(),
             duration_ms,
             width = max_path_length
         )?;
@@ -293,35 +323,40 @@ pub fn perform_edit(tree: &mut Tree, input: &mut Vec<u8>, edit: &Edit) -> InputE
     edit
 }
 
-fn parse_edit_flag(source_code: &Vec<u8>, flag: &str) -> Result<Edit> {
+fn create_edit(
+    source_code: &Vec<u8>,
+    position: &str,
+    deleted_length: &str,
+    inserted_text: &str,
+) -> Result<Edit> {
     let error = || {
         anyhow!(concat!(
-            "Invalid edit string '{}'. ",
+            "Invalid edit: {} {} `{}`. ",
             "Edit strings must match the pattern '<START_BYTE_OR_POSITION> <REMOVED_LENGTH> <NEW_TEXT>'"
-        ), flag)
+        ), position, deleted_length, inserted_text)
     };
 
-    // Three whitespace-separated parts:
-    // * edit position
-    // * deleted length
-    // * inserted text
-    let mut parts = flag.split(" ");
-    let position = parts.next().ok_or_else(error)?;
-    let deleted_length = parts.next().ok_or_else(error)?;
-    let inserted_text = parts.collect::<Vec<_>>().join(" ").into_bytes();
+    let parts = if position.contains(",") {
+        Some(position.split(","))
+    } else if position.contains(":") {
+        Some(position.split(":"))
+    } else {
+        None
+    };
 
     // Position can either be a byte_offset or row,column pair, separated by a comma
-    let position = if position == "$" {
-        source_code.len()
-    } else if position.contains(",") {
-        let mut parts = position.split(",");
-        let row = parts.next().ok_or_else(error)?;
-        let row = usize::from_str_radix(row, 10).map_err(|_| error())?;
-        let column = parts.next().ok_or_else(error)?;
-        let column = usize::from_str_radix(column, 10).map_err(|_| error())?;
-        offset_for_position(source_code, Point { row, column })
-    } else {
-        usize::from_str_radix(position, 10).map_err(|_| error())?
+    let position = {
+        if let Some(mut parts) = parts {
+            let row = parts.next().ok_or_else(error)?;
+            let row = usize::from_str_radix(row, 10).map_err(|_| error())?;
+            let column = parts.next().ok_or_else(error)?;
+            let column = usize::from_str_radix(column, 10).map_err(|_| error())?;
+            offset_for_position(source_code, Point { row, column })
+        } else if position == "$" {
+            source_code.len()
+        } else {
+            usize::from_str_radix(position, 10).map_err(|_| error())?
+        }
     };
 
     // Deleted length must be a byte count.
@@ -330,7 +365,7 @@ fn parse_edit_flag(source_code: &Vec<u8>, flag: &str) -> Result<Edit> {
     Ok(Edit {
         position,
         deleted_length,
-        inserted_text,
+        inserted_text: unescape_lf(inserted_text.as_bytes()),
     })
 }
 
@@ -361,4 +396,75 @@ fn position_for_offset(input: &Vec<u8>, offset: usize) -> Point {
         }
     }
     result
+}
+
+#[cfg(not(unix))]
+pub fn unescape_lf(buf: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(buf.len());
+    let len = buf.len();
+    let mut i = 0;
+    while i < len {
+        let c = buf[i];
+        if c as char == '\\' && i < len {
+            match buf[i + 1] as char {
+                'n' => {
+                    out.push('\n' as u8);
+                }
+                c => {
+                    out.push('\\' as u8);
+                    out.push(c as u8);
+                }
+            }
+            i += 2;
+        } else {
+            out.push(c);
+            i += 1;
+        }
+    }
+    out
+}
+
+#[cfg(unix)]
+pub fn unescape_lf(buf: &[u8]) -> Vec<u8> {
+    buf.to_vec()
+}
+
+#[cfg(unix)]
+mod fast_stdout {
+    use std::fs::File;
+    use std::io::{self, BufWriter, StdoutLock, Write};
+    use std::mem::ManuallyDrop;
+    use std::os::fd::FromRawFd;
+
+    pub(crate) struct FastStdout<'a> {
+        #[allow(dead_code)]
+        lock: StdoutLock<'a>,
+        stdout: ManuallyDrop<BufWriter<File>>,
+    }
+
+    impl<'a> FastStdout<'a> {
+        fn new(lock: StdoutLock<'a>) -> Self {
+            Self {
+                lock,
+                // ManuallyDrop requires to don't close fd that required opened for StdoutLock
+                stdout: ManuallyDrop::new(BufWriter::new(unsafe { File::from_raw_fd(1) })),
+            }
+        }
+    }
+
+    impl Write for FastStdout<'_> {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.stdout.write(buf)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.stdout.flush()
+        }
+    }
+
+    impl<'a> From<StdoutLock<'a>> for FastStdout<'a> {
+        fn from(value: StdoutLock<'a>) -> Self {
+            Self::new(value)
+        }
+    }
 }

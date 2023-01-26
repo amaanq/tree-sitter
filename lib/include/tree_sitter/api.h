@@ -43,7 +43,8 @@ typedef struct TSQueryCursor TSQueryCursor;
 
 typedef enum {
   TSInputEncodingUTF8,
-  TSInputEncodingUTF16,
+  TSInputEncodingUTF16LE,
+  TSInputEncodingUTF16BE,
 } TSInputEncoding;
 
 typedef enum {

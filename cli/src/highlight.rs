@@ -1,4 +1,3 @@
-use super::util;
 use ansi_term::Color;
 use anyhow::Result;
 use lazy_static::lazy_static;
@@ -144,34 +143,30 @@ impl Serialize for Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        serde_json::from_str(
-            r#"
-            {
-              "attribute": {"color": 124, "italic": true},
-              "comment": {"color": 245, "italic": true},
-              "constant.builtin": {"color": 94, "bold": true},
-              "constant": 94,
-              "constructor": 136,
-              "embedded": null,
-              "function.builtin": {"color": 26, "bold": true},
-              "function": 26,
-              "keyword": 56,
-              "number": {"color": 94, "bold": true},
-              "module": 136,
-              "property": 124,
-              "operator": {"color": 239, "bold": true},
-              "punctuation.bracket": 239,
-              "punctuation.delimiter": 239,
-              "string.special": 30,
-              "string": 28,
-              "tag": 18,
-              "type": 23,
-              "type.builtin": {"color": 23, "bold": true},
-              "variable.builtin": {"bold": true},
-              "variable.parameter": {"underline": true}
-            }
-            "#,
-        )
+        serde_json::from_value(json!({
+            "attribute": {"color": 124, "italic": true},
+            "comment": {"color": 245, "italic": true},
+            "constant.builtin": {"color": 94, "bold": true},
+            "constant": 94,
+            "constructor": 136,
+            "embedded": null,
+            "function.builtin": {"color": 26, "bold": true},
+            "function": 26,
+            "keyword": 56,
+            "number": {"color": 94, "bold": true},
+            "module": 136,
+            "property": 124,
+            "operator": {"color": 239, "bold": true},
+            "punctuation.bracket": 239,
+            "punctuation.delimiter": 239,
+            "string.special": 30,
+            "string": 28,
+            "tag": 18,
+            "type": 23,
+            "type.builtin": {"color": 23, "bold": true},
+            "variable.builtin": {"bold": true},
+            "variable.parameter": {"underline": true}
+        }))
         .unwrap()
     }
 }
@@ -385,16 +380,16 @@ pub fn html(
     config: &HighlightConfiguration,
     quiet: bool,
     print_time: bool,
+    cancellation_flag: Option<&AtomicUsize>,
 ) -> Result<()> {
     use std::io::Write;
 
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
     let time = Instant::now();
-    let cancellation_flag = util::cancel_on_stdin();
     let mut highlighter = Highlighter::new();
 
-    let events = highlighter.highlight(config, source, Some(&cancellation_flag), |string| {
+    let events = highlighter.highlight(config, source, cancellation_flag, |string| {
         loader.highlight_config_for_injection_string(string)
     })?;
 

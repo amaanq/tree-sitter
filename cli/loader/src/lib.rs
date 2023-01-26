@@ -626,39 +626,131 @@ impl Loader {
 
     pub fn select_language(
         &mut self,
-        path: &Path,
-        current_dir: &Path,
+        language_source_dir: Option<&Path>,
         scope: Option<&str>,
+        path: Option<&Path>,
     ) -> Result<Language> {
+        let mut fallback_language_id = None;
+        if let Some(language_source_dir) = language_source_dir {
+            let configs = self
+                .find_language_configurations_at_path(&language_source_dir)
+                .with_context(|| {
+                    format!(
+                        "Failed to load language from directory {}",
+                        language_source_dir.to_string_lossy()
+                    )
+                })?;
+
+            let language_id = {
+                if let Some(scope) = scope {
+                    configs
+                        .iter()
+                        .filter_map(|c| {
+                            if let Some(s) = &c.scope {
+                                if s == scope {
+                                    return Some(c.language_id);
+                                }
+                            }
+                            None
+                        })
+                        .next()
+                } else if let Some(path) = path {
+                    let filter = |s| {
+                        let c = configs
+                            .iter()
+                            .filter(|c| c.file_types.iter().filter(|t| *t == s).next().is_some())
+                            .collect::<Vec<_>>();
+                        (!c.is_empty()).then_some(c)
+                    };
+                    let configs = path
+                        .file_name()
+                        .and_then(|file_name| file_name.to_str())
+                        .and_then(|file_name| filter(file_name))
+                        .or_else(|| {
+                            path.extension()
+                                .and_then(|extension| extension.to_str())
+                                .and_then(|extension| filter(extension))
+                        });
+                    if let Some(configs) = configs {
+                        if !configs.is_empty() {
+                            if configs.len() == 1 {
+                                Some(configs[0].language_id)
+                            } else {
+                                let file_contents = fs::read(path)
+                                    .with_context(|| format!("Failed to read path {:?}", path))?;
+                                let file_contents = String::from_utf8_lossy(&file_contents);
+                                let mut best_score = -2isize;
+                                let mut best_config = None;
+                                for config in configs {
+                                    let score;
+                                    if let Some(content_regex) = &config.content_regex {
+                                        if let Some(mat) = content_regex.find(&file_contents) {
+                                            score = (mat.end() - mat.start()) as isize;
+                                        } else {
+                                            score = -1;
+                                        }
+                                    } else {
+                                        score = 0;
+                                    }
+                                    if score > best_score {
+                                        best_config = Some(config);
+                                        best_score = score;
+                                    }
+                                }
+                                Some(best_config.unwrap().language_id)
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+
+            if let Some(language_id) = language_id {
+                let language = self.language_for_id(language_id)?;
+                return Ok(language);
+            } else {
+                if configs.len() > 0 {
+                    fallback_language_id = Some(configs[0].language_id);
+                }
+            }
+        }
+
         if let Some(scope) = scope {
             if let Some(config) = self
                 .language_configuration_for_scope(scope)
                 .with_context(|| format!("Failed to load language for scope '{}'", scope))?
             {
-                Ok(config.0)
+                return Ok(config.0);
             } else {
                 return Err(anyhow!("Unknown scope '{}'", scope));
             }
-        } else if let Some((lang, _)) = self
-            .language_configuration_for_file_name(path)
-            .with_context(|| {
-                format!(
-                    "Failed to load language for file name {}",
-                    &path.file_name().unwrap().to_string_lossy()
-                )
-            })?
-        {
-            Ok(lang)
-        } else if let Some(lang) = self
-            .languages_at_path(&current_dir)
-            .with_context(|| "Failed to load language in current directory")?
-            .first()
-            .cloned()
-        {
-            Ok(lang)
-        } else {
-            Err(anyhow!("No language found"))
         }
+
+        if let Some(path) = path {
+            if let Some((lang, _)) = self
+                .language_configuration_for_file_name(path)
+                .with_context(|| {
+                    format!(
+                        "Failed to load language for file name {}",
+                        &path.file_name().unwrap().to_string_lossy()
+                    )
+                })?
+            {
+                return Ok(lang);
+            }
+        }
+
+        if let Some(language_id) = fallback_language_id {
+            let language = self.language_for_id(language_id)?;
+            return Ok(language);
+        }
+
+        return Err(anyhow!("No language found"));
     }
 
     pub fn use_debug_build(&mut self, flag: bool) {

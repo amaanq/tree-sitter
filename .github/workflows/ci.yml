@@ -65,7 +65,7 @@ jobs:
           version: ${{ env.EMSCRIPTEN_VERSION }}
 
       - name: Build C library
-        run: make
+        run: make -j
 
       - name: Build wasm library
         run: script/build-wasm

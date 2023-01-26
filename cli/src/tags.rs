@@ -1,7 +1,7 @@
 use super::util;
 use anyhow::{anyhow, Result};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fs, str};
 use tree_sitter_loader::Loader;
@@ -10,7 +10,7 @@ use tree_sitter_tags::TagsContext;
 pub fn generate_tags(
     loader: &Loader,
     scope: Option<&str>,
-    paths: &[String],
+    paths: &[PathBuf],
     quiet: bool,
     time: bool,
 ) -> Result<()> {

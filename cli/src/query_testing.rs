@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::fs;
+use std::{fs, path::PathBuf};
 use tree_sitter::{Language, Parser, Point};
 
 lazy_static! {
@@ -125,7 +125,7 @@ pub fn parse_position_comments(
 
 pub fn assert_expected_captures(
     infos: Vec<CaptureInfo>,
-    path: String,
+    path: PathBuf,
     parser: &mut Parser,
     language: Language,
 ) -> Result<()> {
