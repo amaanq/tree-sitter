@@ -3,14 +3,22 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs};
 
+const BUILD_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 fn main() {
-    if let Some(git_sha) = read_git_sha() {
-        println!("cargo:rustc-env={}={}", "BUILD_SHA", git_sha);
-    }
+    let mut version = if let Some(build_sha) = read_git_sha() {
+        format!("{} ({})", BUILD_VERSION, build_sha)
+    } else {
+        BUILD_VERSION.to_string()
+    };
 
     if let Some(git_describe) = read_git_describe() {
-        println!("cargo:rustc-env={}={}", "GIT_DESCRIBE", git_describe);
+        if !git_describe.starts_with(format!("v{BUILD_VERSION}").as_str()) {
+            version += format!(", git: {}", git_describe).as_str();
+        }
     }
+
+    println!("cargo:rustc-env={}={}", "TREE_SITTER_CLI_VERSION", version);
 
     if web_playground_files_present() {
         println!("cargo:rustc-cfg={}", "TREE_SITTER_EMBED_WASM_BINDING");
@@ -97,7 +105,7 @@ fn read_git_sha() -> Option<String> {
                                     if let Some(path) = packed_refs.to_str() {
                                         println!("cargo:rerun-if-changed={}", path);
                                     }
-                                    return Some(hash.to_string());
+                                    return Some(hash.trim_end().to_string());
                                 }
                             }
                         }
@@ -108,7 +116,9 @@ fn read_git_sha() -> Option<String> {
             if let Some(path) = ref_filename.to_str() {
                 println!("cargo:rerun-if-changed={}", path);
             }
-            return fs::read_to_string(&ref_filename).ok();
+            return fs::read_to_string(&ref_filename)
+                .ok()
+                .map(|s| s.trim_end().to_string());
         }
         // If we're on a detached commit, then the `HEAD` file itself contains the sha.
         else if head_content.len() == 40 {
