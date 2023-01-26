@@ -15,7 +15,7 @@ fn main() {
     };
 
     if let Some(git_describe) = read_git_describe() {
-        if !git_describe.starts_with(format!("v{BUILD_VERSION}").as_str()) {
+        if !git_describe.is_empty() && !git_describe.starts_with(format!("v{BUILD_VERSION}").as_str()) {
             version += format!(", git: {}", git_describe).as_str();
         }
     }
