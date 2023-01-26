@@ -1,10 +1,15 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::{env, fs};
 
 fn main() {
     if let Some(git_sha) = read_git_sha() {
         println!("cargo:rustc-env={}={}", "BUILD_SHA", git_sha);
+    }
+
+    if let Some(git_describe) = read_git_describe() {
+        println!("cargo:rustc-env={}={}", "GIT_DESCRIBE", git_describe);
     }
 
     if web_playground_files_present() {
@@ -123,4 +128,13 @@ fn read_rust_binding_version() -> String {
         .unwrap()
         .trim_matches('"')
         .to_string()
+}
+
+fn read_git_describe() -> Option<String> {
+    Command::new("git")
+        .arg("describe")
+        .arg("--tags")
+        .output()
+        .map(|o| String::from_utf8(o.stdout).unwrap_or_default())
+        .ok()
 }

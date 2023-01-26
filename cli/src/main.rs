@@ -15,6 +15,7 @@ use tree_sitter_loader as loader;
 
 const BUILD_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const BUILD_SHA: Option<&'static str> = option_env!("BUILD_SHA");
+const GIT_DESCRIBE: Option<&'static str> = option_env!("GIT_DESCRIBE");
 const DEFAULT_GENERATE_ABI_VERSION: usize = 14;
 
 fn main() {
@@ -34,11 +35,17 @@ fn main() {
 }
 
 fn run() -> Result<()> {
-    let version = if let Some(build_sha) = BUILD_SHA {
+    let mut version = if let Some(build_sha) = BUILD_SHA {
         format!("{} ({})", BUILD_VERSION, build_sha)
     } else {
         BUILD_VERSION.to_string()
     };
+
+    if let Some(git_describe) = GIT_DESCRIBE {
+        if !git_describe.starts_with(format!("v{BUILD_VERSION}").as_str()) {
+            version += format!(", git: {}", git_describe).as_str();
+        }
+    }
 
     let libdir_arg = Arg::new("libdir")
         .help("Path to compiled grammars folder")
