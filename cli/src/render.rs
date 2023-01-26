@@ -155,6 +155,7 @@ pub struct SExpressionRenderer<'a, W: Write> {
     stdout: W,
     indent_level: usize,
     flags: &'a SExpressionFlags,
+    line_no_offset: usize,
 }
 
 impl<W: Write> Visitor for SExpressionRenderer<'_, W> {
@@ -199,9 +200,11 @@ impl<W: Write> Visitor for SExpressionRenderer<'_, W> {
 
 impl<'a, W: Write> SExpressionRenderer<'a, W> {
     pub fn new(stdout: W, flags: &'a SExpressionFlags) -> Self {
+        let offset = flags.text.lines_count_from_one.then(|| 1).unwrap_or(0);
         Self {
             stdout,
             indent_level: 0,
+            line_no_offset: offset,
             flags,
         }
     }
@@ -229,9 +232,9 @@ impl<'a, W: Write> SExpressionRenderer<'a, W> {
                 self.stdout,
                 "({} [{}, {}] - [{}, {}]",
                 node.kind(),
-                start.row,
+                start.row + self.line_no_offset,
                 start.column,
-                end.row,
+                end.row + self.line_no_offset,
                 end.column
             )?;
         } else {
