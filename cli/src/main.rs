@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{crate_authors, crate_description, Arg, ArgAction, ArgMatches, Command};
 use loader::Loader;
 use std::path::{Path, PathBuf};
 use std::{env, fs, u64};
@@ -99,8 +99,8 @@ fn run() -> Result<()> {
 
     let app = {
         Command::new("tree-sitter")
-            .author("Max Brunsfeld <maxbrunsfeld@gmail.com>")
-            .about("Generates and tests parsers")
+            .author(crate_authors!("\n"))
+            .about(crate_description!())
             .version(version)
             .subcommand_required(true)
             .disable_help_subcommand(true)

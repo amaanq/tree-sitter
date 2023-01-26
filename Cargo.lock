@@ -100,6 +100,7 @@ dependencies = [
  "bitflags",
  "clap_lex",
  "is-terminal",
+ "once_cell",
  "strsim",
  "termcolor",
  "terminal_size",
