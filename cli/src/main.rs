@@ -94,7 +94,7 @@ fn run() -> Result<()> {
         Command::new("tree-sitter")
             .author(crate_authors!("\n"))
             .about(crate_description!())
-            .version(VERSION)
+            .version(VERSION.replace("; ", "\n"))
             .subcommand_required(true)
             .disable_help_subcommand(true)
             .arg(&libdir_arg)

@@ -6,8 +6,10 @@ use std::{env, fs};
 const BUILD_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 fn main() {
+    let cli_cargo = Path::new("Cargo.toml");
+
     let mut version = if let Some(build_sha) = read_git_sha() {
-        format!("{} ({})", BUILD_VERSION, build_sha)
+        format!("{:10}{} ({})", "", BUILD_VERSION, build_sha)
     } else {
         BUILD_VERSION.to_string()
     };
@@ -18,13 +20,19 @@ fn main() {
         }
     }
 
+    let rust_binding_version = read_dependency_version(cli_cargo, "tree-sitter");
+    let config_version = read_dependency_version(cli_cargo, "tree-sitter-config");
+    let loader_version = read_dependency_version(cli_cargo, "tree-sitter-loader");
+    let highlight_version = read_dependency_version(cli_cargo, "tree-sitter-highlight");
+    let tags_version = read_dependency_version(cli_cargo, "tree-sitter-tags");
+
+    version += format!("; {:21} {config_version}", "tree-sitter-config").as_str();
+    version += format!("; {:21} {loader_version}", "tree-sitter-loader").as_str();
+    version += format!("; {:21} {highlight_version}", "tree-sitter-highlight").as_str();
+    version += format!("; {:21} {tags_version}", "tree-sitter-tags").as_str();
+
     println!("cargo:rustc-env={}={}", "TREE_SITTER_CLI_VERSION", version);
 
-    if web_playground_files_present() {
-        println!("cargo:rustc-cfg={}", "TREE_SITTER_EMBED_WASM_BINDING");
-    }
-
-    let rust_binding_version = read_rust_binding_version();
     println!(
         "cargo:rustc-env={}={}",
         "RUST_BINDING_VERSION", rust_binding_version,
@@ -33,8 +41,13 @@ fn main() {
     let emscripten_version = fs::read_to_string("emscripten-version").unwrap();
     println!(
         "cargo:rustc-env={}={}",
-        "EMSCRIPTEN_VERSION", emscripten_version,
+        "EMSCRIPTEN_VERSION",
+        emscripten_version.trim_end(),
     );
+
+    if web_playground_files_present() {
+        println!("cargo:rustc-cfg={}", "TREE_SITTER_EMBED_WASM_BINDING");
+    }
 }
 
 fn web_playground_files_present() -> bool {
@@ -129,15 +142,18 @@ fn read_git_sha() -> Option<String> {
     None
 }
 
-fn read_rust_binding_version() -> String {
-    let path = "Cargo.toml";
-    let text = fs::read_to_string(path).unwrap();
+fn read_toml_value(toml_path: &Path, path_fn: &(dyn Fn(&toml::Value) -> &toml::Value)) -> String {
+    let text = fs::read_to_string(toml_path).unwrap();
     let cargo_toml = toml::from_str::<toml::Value>(text.as_ref()).unwrap();
-    cargo_toml["dependencies"]["tree-sitter"]["version"]
+    path_fn(&cargo_toml)
         .as_str()
         .unwrap()
         .trim_matches('"')
         .to_string()
+}
+
+fn read_dependency_version(toml_path: &Path, name: &str) -> String {
+    read_toml_value(toml_path, &|v| &v["dependencies"][name]["version"])
 }
 
 fn read_git_describe() -> Option<String> {
@@ -145,6 +161,11 @@ fn read_git_describe() -> Option<String> {
         .arg("describe")
         .arg("--tags")
         .output()
-        .map(|o| String::from_utf8(o.stdout).unwrap_or_default())
+        .map(|o| {
+            String::from_utf8(o.stdout)
+                .unwrap_or_default()
+                .trim_end()
+                .to_string()
+        })
         .ok()
 }
