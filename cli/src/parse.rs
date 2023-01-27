@@ -4,7 +4,7 @@ use super::util;
 use crate::input::ParserInput;
 use crate::render::{
     as_u16_slice, collect_node_ids, text_render, xml_render, CstFlags, CstRenderer, Encoding,
-    SExpressionFlags, SExpressionRenderer,
+    SExpressionFlags, SExpressionRenderer, TextFlags,
 };
 use crate::visitor::Visitor;
 use anyhow::{anyhow, bail, Result};
@@ -174,7 +174,20 @@ pub fn parse_input(
         }
         let duration = time.elapsed();
         let duration_ms = duration.as_secs() * 1000 + duration.subsec_nanos() as u64 / 1000000;
-        let mut cursor = tree.walk();
+
+        let mut text_flags = TextFlags::default();
+
+        let row_offset = text_flags.lines_count_from_one.then(|| 1).unwrap_or(0);
+
+        let mut cursor = tree
+            .root_node_with_offset(
+                0,
+                Point {
+                    row: row_offset,
+                    column: 0,
+                },
+            )
+            .walk();
 
         let mut cst_output = false;
         if !quiet {
@@ -198,7 +211,6 @@ pub fn parse_input(
             #[cfg(unix)]
             let mut stdout: fast_stdout::FastStdout = stdout.lock().into();
 
-            let mut text_flags = Default::default();
             match output {
                 None => {
                     let flags = SExpressionFlags::default();

@@ -41,7 +41,7 @@ impl ExtraFlags {
 #[derive(Clone, Default, Debug)]
 pub struct TextFlags {
     pub show: bool,
-    lines_count_from_one: bool,
+    pub lines_count_from_one: bool,
 }
 
 impl TextFlags {
@@ -155,7 +155,6 @@ pub struct SExpressionRenderer<'a, W: Write> {
     stdout: W,
     indent_level: usize,
     flags: &'a SExpressionFlags,
-    line_no_offset: usize,
 }
 
 impl<W: Write> Visitor for SExpressionRenderer<'_, W> {
@@ -200,11 +199,9 @@ impl<W: Write> Visitor for SExpressionRenderer<'_, W> {
 
 impl<'a, W: Write> SExpressionRenderer<'a, W> {
     pub fn new(stdout: W, flags: &'a SExpressionFlags) -> Self {
-        let offset = flags.text.lines_count_from_one.then(|| 1).unwrap_or(0);
         Self {
             stdout,
             indent_level: 0,
-            line_no_offset: offset,
             flags,
         }
     }
@@ -232,9 +229,9 @@ impl<'a, W: Write> SExpressionRenderer<'a, W> {
                 self.stdout,
                 "({} [{}, {}] - [{}, {}]",
                 node.kind(),
-                start.row + self.line_no_offset,
+                start.row,
                 start.column,
-                end.row + self.line_no_offset,
+                end.row,
                 end.column
             )?;
         } else {
@@ -277,7 +274,6 @@ pub struct CstRenderer<'a, W: Write> {
     indent_level: usize,
     indent_shift: usize,
     last_line_no: usize,
-    line_no_offset: usize,
     original_nodes: &'a Option<HashSet<usize>>,
     flags: &'a CstFlags,
     encoding: Encoding,
@@ -286,7 +282,6 @@ pub struct CstRenderer<'a, W: Write> {
 
 impl<'a, W: Write> CstRenderer<'a, W> {
     pub fn new(writer: &'a mut W, text: &'a [u8], flags: &'a CstFlags) -> Self {
-        let offset = flags.text.lines_count_from_one.then(|| 1).unwrap_or(0);
         Self {
             color: Colors::new(),
             stdout: writer,
@@ -296,7 +291,6 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             indent_level: 0,
             indent_shift: 0,
             last_line_no: usize::MAX,
-            line_no_offset: offset,
             original_nodes: &None,
             flags,
             encoding: Encoding::UTF8,
@@ -428,10 +422,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             };
             let pos = format!(
                 "{}:{:<2} - {}:{}",
-                start.row + self.line_no_offset,
-                start.column,
-                end.row + self.line_no_offset,
-                end.column,
+                start.row, start.column, end.row, end.column,
             );
 
             let indent = self.indent - pos.len();
@@ -556,7 +547,6 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                             pos.clear();
                             let mut p = self.indent_base;
                             if self.flags.show_positions {
-                                let row = row + self.line_no_offset;
                                 let col = if multiline {
                                     0
                                 } else {
