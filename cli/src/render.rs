@@ -591,7 +591,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             if node.is_error() {
                 self.write_colored("ERROR: ", self.color.error)?;
             }
-            let s = translate_invisible_symbols(node.kind()).collect();
+            let s = escape_chars(node.kind()).collect();
             let s = if self.flags.unquoted_anonymous {
                 s
             } else {
@@ -624,7 +624,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                     self.color.backtick.prefix(),
                     self.color
                         .text
-                        .paint(translate_invisible_symbols(value).collect::<String>()),
+                        .paint(escape_invisible_symbols(value).collect::<String>()),
                     self.color.lf.prefix(),
                     self.color.backtick.prefix(),
                     self.color.backtick.suffix()
@@ -636,7 +636,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                     self.color.backtick.prefix(),
                     self.color
                         .text
-                        .paint(translate_invisible_symbols(value).collect::<String>()),
+                        .paint(escape_invisible_symbols(value).collect::<String>()),
                     self.color.backtick.prefix(),
                     self.color.backtick.suffix()
                 )
@@ -670,7 +670,21 @@ impl<'a, W: Write> CstRenderer<'a, W> {
 }
 
 #[inline(always)]
-pub fn translate_invisible_symbols(s: &str) -> impl Iterator<Item = char> + '_ {
+pub fn escape_chars(s: &str) -> impl Iterator<Item = char> + '_ {
+    translate_symbols(s, escape_char)
+}
+
+#[inline(always)]
+fn escape_char(c: char) -> Option<&'static str> {
+    Some(match c {
+        '\\' => "\\\\",
+        '\"' => "\\\"",
+        _ => return escape_invisible(c),
+    })
+}
+
+#[inline(always)]
+pub fn escape_invisible_symbols(s: &str) -> impl Iterator<Item = char> + '_ {
     translate_symbols(s, escape_invisible)
 }
 
