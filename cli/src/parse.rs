@@ -4,7 +4,7 @@ use super::util;
 use crate::input::ParserInput;
 use crate::render::{
     as_u16_slice, collect_node_ids, text_render, xml_render, CstFlags, CstRenderer, Encoding,
-    SExpressionFlags, SExpressionRenderer, TextFlags,
+    SExpressionFlags, SExpressionRenderer,
 };
 use crate::visitor::Visitor;
 use anyhow::{anyhow, bail, Result};
@@ -175,9 +175,15 @@ pub fn parse_input(
         let duration = time.elapsed();
         let duration_ms = duration.as_secs() * 1000 + duration.subsec_nanos() as u64 / 1000000;
 
-        let mut text_flags = TextFlags::default();
+        let (lines_count_from_one, show_text) = match output {
+            Some(OutputFormat::SExpression(flags)) => {
+                (flags.text.lines_count_from_one, flags.text.show)
+            }
+            Some(OutputFormat::Cst(flags)) => (flags.text.lines_count_from_one, flags.text.show),
+            _ => (false, false),
+        };
 
-        let row_offset = text_flags.lines_count_from_one.then(|| 1).unwrap_or(0);
+        let row_offset = lines_count_from_one.then(|| 1).unwrap_or(0);
 
         let mut cursor = tree
             .root_node_with_offset(
@@ -217,13 +223,11 @@ pub fn parse_input(
                     SExpressionRenderer::new(&mut stdout, &flags).perform(cursor.clone())?;
                 }
                 Some(OutputFormat::SExpression(flags)) => {
-                    text_flags = flags.text.clone();
                     let func =
                         || SExpressionRenderer::new(&mut stdout, flags).perform(cursor.clone());
                     render_timing(func, flags.extra.render_timing)?;
                 }
                 Some(OutputFormat::Cst(flags)) => {
-                    text_flags = flags.text.clone();
                     cst_output = true;
                     let func = || {
                         CstRenderer::new(&mut stdout, &input.source_code, flags)
@@ -237,13 +241,13 @@ pub fn parse_input(
                     xml_render(&mut stdout, &mut cursor, &input.source_code)?;
                 }
             }
-            if text_flags.show {
+            if show_text {
                 let source_code = if has_bom {
                     &input.source_code[encoding.bom().len()..]
                 } else {
                     &input.source_code
                 };
-                text_render(&mut stdout, &text_flags, source_code)?;
+                text_render(&mut stdout, row_offset, source_code)?;
             }
         }
 

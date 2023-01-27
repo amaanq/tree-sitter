@@ -840,8 +840,7 @@ pub fn xml_render(stdout: &mut impl Write, cursor: &mut TreeCursor, text: &[u8])
 
 // ------------------------------------------------------------------------------------------------
 
-pub fn text_render(stdout: &mut impl Write, flags: &TextFlags, source_code: &[u8]) -> Result {
-    let offset = flags.lines_count_from_one.then(|| 1).unwrap_or(0);
+pub fn text_render(stdout: &mut impl Write, offset: usize, source_code: &[u8]) -> Result {
     stdout.write_all(b"\n")?;
     let n_color = Color::Blue.normal();
     for (mut i, s) in BufRead::split(source_code, b'\n').enumerate() {
