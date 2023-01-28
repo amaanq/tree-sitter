@@ -7,7 +7,7 @@ use std::{
     io::{BufRead, Write},
     str::Chars,
 };
-use tree_sitter::{Node, Tree, TreeCursor};
+use tree_sitter::{Node, Range, Tree, TreeCursor};
 
 // ------------------------------------------------------------------------------------------------
 
@@ -275,6 +275,7 @@ pub struct CstRenderer<'a, W: Write> {
     indent_shift: usize,
     last_line_no: usize,
     original_nodes: &'a Option<HashSet<usize>>,
+    changed_ranges: &'a Option<Vec<Range>>,
     flags: &'a CstFlags,
     encoding: Encoding,
     buf: String,
@@ -292,6 +293,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             indent_shift: 0,
             last_line_no: usize::MAX,
             original_nodes: &None,
+            changed_ranges: &None,
             flags,
             encoding: Encoding::UTF8,
             buf: String::with_capacity(1024),
@@ -305,6 +307,11 @@ impl<'a, W: Write> CstRenderer<'a, W> {
 
     pub fn original_nodes(mut self, original_nodes: &'a Option<HashSet<usize>>) -> Self {
         self.original_nodes = original_nodes;
+        self
+    }
+
+    pub fn changed_ranges(mut self, ranges: &'a Option<Vec<Range>>) -> Self {
+        self.changed_ranges = ranges;
         self
     }
 }
@@ -336,7 +343,8 @@ colors! {
     extra    153 153 255 normal
     text     118 118 118 normal
     edit     255 255 102 normal
-    changed  0   255 0   normal
+    changed  0   0   255 normal
+    renewed  0   255 0   normal
     backtick 101 192 67  normal
     missing  255 153 51  bold
     error    255 51  51  bold
@@ -452,7 +460,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             self.write_colored("•", self.color.edit)?;
         } else if let Some(map) = self.original_nodes {
             if !map.contains(&node.id()) {
-                self.write_colored("•", self.color.changed)?;
+                self.write_colored("•", self.color.renewed)?;
             }
         }
         Ok(())

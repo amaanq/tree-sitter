@@ -142,6 +142,8 @@ pub fn parse_input(
             None
         };
 
+        let mut changed_ranges = None;
+
         if !edits.is_empty() {
             if debug_graph {
                 println!("BEFORE:\n{}", String::from_utf8_lossy(&input.source_code));
@@ -169,7 +171,10 @@ pub fn parse_input(
                 }
             }
             if apply_edits {
-                tree = parser.parse(&input.source_code, Some(&tree)).unwrap();
+                let old_tree = &tree;
+                let new_tree = parser.parse(&input.source_code, Some(old_tree)).unwrap();
+                changed_ranges = Some(new_tree.changed_ranges(old_tree).collect());
+                tree = new_tree;
             }
         }
         let duration = time.elapsed();
@@ -232,6 +237,7 @@ pub fn parse_input(
                     let func = || {
                         CstRenderer::new(&mut stdout, &input.source_code, flags)
                             .original_nodes(&node_ids)
+                            .changed_ranges(&changed_ranges)
                             .encoding(encoding)
                             .perform(cursor.clone())
                     };
