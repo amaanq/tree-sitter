@@ -12,7 +12,7 @@ use std::io::{self, Write};
 use std::sync::atomic::AtomicUsize;
 use std::time::{Duration, Instant};
 use std::{fmt, usize};
-use tree_sitter::{InputEdit, LogType, Parser, Point, Tree};
+use tree_sitter::{InputEdit, LogType, Parser, Point, Range, Tree};
 
 #[derive(Clone, Debug)]
 pub enum OutputFormat {
@@ -172,25 +172,12 @@ pub fn parse_input(
                     );
                 }
             }
-
-            eprintln!(
-                "unapplied_changed_ranges: {:#?}",
-                tree.changed_ranges(&old_tree).collect::<Vec<_>>()
-            );
-
             if apply_edits {
-                let old_tree = &tree;
-                let new_tree = parser.parse(&input.source_code, Some(old_tree)).unwrap();
-                changed_ranges = Some(new_tree.changed_ranges(old_tree).collect());
-                tree = new_tree;
-                eprintln!("changed_ranges: {changed_ranges:#?}");
+                tree = parser.parse(&input.source_code, Some(&tree)).unwrap();
             }
-
-            eprintln!(
-                "applied_changed_ranges: {:#?}",
-                tree.changed_ranges(&old_tree).collect::<Vec<_>>()
-            );
+            changed_ranges = Some(tree.changed_ranges(&old_tree).collect());
         }
+
         let duration = time.elapsed();
         let duration_ms = duration.as_secs() * 1000 + duration.subsec_nanos() as u64 / 1000000;
 
@@ -259,6 +246,35 @@ pub fn parse_input(
                 }
                 Some(OutputFormat::Xml) => {
                     xml_render(&mut stdout, &mut cursor, &input.source_code)?;
+                }
+            }
+            if let Some(ranges) = changed_ranges {
+                let c = crate::render::Colors::new();
+                println!();
+                // println!(
+                //     "\n{C}Changed ranges:{R}",
+                //     C = c.field.prefix(),
+                //     R = c.field.suffix()
+                // );
+                for range in ranges {
+                    let Range {
+                        start_byte,
+                        end_byte,
+                        start_point:
+                            Point {
+                                row: start_row,
+                                column: start_column,
+                            },
+                        end_point:
+                            Point {
+                                row: end_row,
+                                column: end_column,
+                            },
+                    } = range;
+                    println!(
+                        "{P}{start_row}:{start_column:<2} - {end_row}:{end_column:<2} {B}{start_byte}:{end_byte}{R}",
+                        P=c.term.prefix(), B=c.bytes.prefix(), R=c.nonterm.suffix()
+                    );
                 }
             }
             if show_text {

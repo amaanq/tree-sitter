@@ -318,12 +318,12 @@ impl<'a, W: Write> CstRenderer<'a, W> {
 
 macro_rules! colors {
     ($($name:ident $R: literal $G: literal $B: literal $style:ident)+) => {
-        struct Colors {
-            $($name: Style),+
+        pub struct Colors {
+             $(pub $name: Style),+
         }
 
         impl Colors {
-            fn new() -> Self {
+            pub fn new() -> Self {
                 Self {
                     $($name: Color::RGB($R, $G, $B).$style(),)+
                 }
@@ -337,6 +337,7 @@ colors! {
     lf       166 172 181 normal
     pos1     188 218 120 normal
     pos2     92  108 115 normal
+    bytes    175 122 197 normal
     term     219 219 173 normal
     field    177 220 253 normal
     nonterm  117 187 253 normal
