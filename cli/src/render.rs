@@ -106,6 +106,7 @@ pub struct CstFlags {
     pub text: TextFlags,
     pub extra: ExtraFlags,
     show_positions: bool,
+    show_byte_positions: bool,
     unquoted_anonymous: bool,
     always_show_full_error_captures: bool,
 }
@@ -116,6 +117,7 @@ impl Default for CstFlags {
             text: Default::default(),
             extra: Default::default(),
             show_positions: true,
+            show_byte_positions: false,
             unquoted_anonymous: false,
             always_show_full_error_captures: false,
         }
@@ -129,6 +131,8 @@ impl CstFlags {
             'e' => self.always_show_full_error_captures = true,
             'U' => self.unquoted_anonymous = false,
             'u' => self.unquoted_anonymous = true,
+            'B' => self.show_byte_positions = false,
+            'b' => self.show_byte_positions = true,
             'P' => self.show_positions = false,
             'p' => self.show_positions = true,
             _ => return false,
@@ -406,7 +410,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
     #[inline(always)]
     fn indent(&mut self, context: &Context) -> Result {
         self.indent_base = self.indent_shift + self.indent_level * 2;
-        self.indent_base += 15;
+        self.indent_base += self.flags.show_byte_positions.then(|| 20).unwrap_or(15); // TODO: Implement a waterline idea
         self.indent = self.indent_base;
         let node = context.node();
 
@@ -436,6 +440,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                 }
             };
             let pos = format!("{start_row}:{start_column:<2} - {end_row}:{end_column:<2}");
+            let mut pos_len = pos.len();
             write!(
                 self.stdout,
                 "{C}{pos}{R}",
@@ -443,7 +448,18 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                 R = pos_color.suffix(),
             )?;
 
-            let indent = self.indent - pos.len();
+            if self.flags.show_byte_positions {
+                let byte_pos = format!("{:4}:{:<2}", node.start_byte(), node.end_byte());
+                pos_len += byte_pos.len();
+                write!(
+                    self.stdout,
+                    "{C}{byte_pos}{R}",
+                    C = self.color.bytes.prefix(),
+                    R = self.color.bytes.suffix()
+                )?;
+            }
+
+            let indent = self.indent - pos_len;
             write!(self.stdout, "{}", NODE_PAD.repeat(indent))?;
             self.render_dot_marks(&node)?;
 

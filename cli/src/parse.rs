@@ -272,7 +272,7 @@ pub fn parse_input(
                             },
                     } = range;
                     println!(
-                        "{P}{start_row}:{start_column:<2} - {end_row}:{end_column:<2} {B}{start_byte}:{end_byte}{R}",
+                        "{P}{start_row}:{start_column:<2} - {end_row}:{end_column:<2} {B}{start_byte:3}:{end_byte}{R}",
                         P=c.term.prefix(), B=c.bytes.prefix(), R=c.nonterm.suffix()
                     );
                 }
