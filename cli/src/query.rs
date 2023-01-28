@@ -6,7 +6,7 @@ use std::{
     ops::Range,
     path::{Path, PathBuf},
 };
-use tree_sitter::{Language, Parser, Query, QueryCursor};
+use tree_sitter::{Language, Parser, Point, Query, QueryCursor};
 
 pub fn query_files_at_paths(
     language: Language,
@@ -41,20 +41,26 @@ pub fn query_files_at_paths(
         let tree = parser.parse(&source_code, None).unwrap();
 
         if ordered_captures {
-            for (mat, capture_index) in
+            for (m, capture_index) in
                 query_cursor.captures(&query, tree.root_node(), source_code.as_slice())
             {
-                let capture = mat.captures[capture_index];
-                let capture_name = &query.capture_names()[capture.index as usize];
+                let pattern_index = m.pattern_index;
+                let capture = m.captures[capture_index];
+                let capture_index = capture.index;
+                let capture_name = &query.capture_names()[capture_index as usize];
+                let Point {
+                    row: start_row,
+                    column: start_column,
+                } = capture.node.start_position();
+                let Point {
+                    row: end_row,
+                    column: end_column,
+                } = capture.node.end_position();
+                let pos = format!("{start_row:3}:{start_column:<2} - {end_row}:{end_column:<3}");
+                let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
                 writeln!(
                     &mut stdout,
-                    "    pattern: {:>2}, capture: {} - {}, start: {}, end: {}, text: `{}`",
-                    mat.pattern_index,
-                    capture.index,
-                    capture_name,
-                    capture.node.start_position(),
-                    capture.node.end_position(),
-                    capture.node.utf8_text(&source_code).unwrap_or("")
+                    "    {pos:<15} pattern: {pattern_index:>2}, capture: {capture_index:<2} - {capture_name}, text: `{capture_text}`"
                 )?;
                 results.push(query_testing::CaptureInfo {
                     name: capture_name.to_string(),
@@ -64,27 +70,27 @@ pub fn query_files_at_paths(
             }
         } else {
             for m in query_cursor.matches(&query, tree.root_node(), source_code.as_slice()) {
-                writeln!(&mut stdout, "  pattern: {}", m.pattern_index)?;
+                let pattern_index = m.pattern_index;
+                writeln!(&mut stdout, "  pattern: {}", pattern_index)?;
                 for capture in m.captures {
-                    let start = capture.node.start_position();
-                    let end = capture.node.end_position();
-                    let capture_name = &query.capture_names()[capture.index as usize];
-                    if end.row == start.row {
+                    let capture_index = capture.index;
+                    let capture_name = &query.capture_names()[capture_index as usize];
+                    let Point {
+                        row: start_row,
+                        column: start_column,
+                    } = capture.node.start_position();
+                    let Point {
+                        row: end_row,
+                        column: end_column,
+                    } = capture.node.end_position();
+                    let pos = format!("{start_row:3}:{start_column} - {end_row}:{end_column:<3}");
+                    if end_row == start_row {
+                        let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
                         writeln!(
                             &mut stdout,
-                            "    capture: {} - {}, start: {}, end: {}, text: `{}`",
-                            capture.index,
-                            capture_name,
-                            start,
-                            end,
-                            capture.node.utf8_text(&source_code).unwrap_or("")
-                        )?;
+                            "    {pos:<15} capture: {capture_index:2} - {capture_name}, text: `{capture_text}`")?;
                     } else {
-                        writeln!(
-                            &mut stdout,
-                            "    capture: {}, start: {}, end: {}",
-                            capture_name, start, end,
-                        )?;
+                        writeln!(&mut stdout, "    {pos:<15} capture: {capture_name}",)?;
                     }
                     results.push(query_testing::CaptureInfo {
                         name: capture_name.to_string(),
