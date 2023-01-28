@@ -343,7 +343,7 @@ colors! {
     extra    153 153 255 normal
     text     118 118 118 normal
     edit     255 255 102 normal
-    changed  0   0   255 normal
+    // changed  0   0   255 normal
     renewed  0   255 0   normal
     backtick 101 192 67  normal
     missing  255 153 51  bold
@@ -598,15 +598,16 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             self.write_colored(&*s, node_color)?;
         }
 
-        // self.write(
-        //     format!(
-        //         " -- {}, {}:{}",
-        //         self.indent_shift,
-        //         node.start_byte(),
-        //         node.end_byte()
-        //     )
-        //     .as_bytes(),
-        // )?;
+        self.write(
+            format!(
+                // " -- {}, {}:{}",
+                // self.indent_shift,
+                " -- {}:{}",
+                node.start_byte(),
+                node.end_byte()
+            )
+            .as_bytes(),
+        )?;
         Ok(())
     }
 

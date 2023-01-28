@@ -149,6 +149,8 @@ pub fn parse_input(
                 println!("BEFORE:\n{}", String::from_utf8_lossy(&input.source_code));
             }
 
+            let old_tree = tree.clone();
+
             let mut i = 0;
             let mut edits = edits.iter();
             while let Some(position) = edits.next() {
@@ -170,12 +172,24 @@ pub fn parse_input(
                     );
                 }
             }
+
+            eprintln!(
+                "unapplied_changed_ranges: {:#?}",
+                tree.changed_ranges(&old_tree).collect::<Vec<_>>()
+            );
+
             if apply_edits {
                 let old_tree = &tree;
                 let new_tree = parser.parse(&input.source_code, Some(old_tree)).unwrap();
                 changed_ranges = Some(new_tree.changed_ranges(old_tree).collect());
                 tree = new_tree;
+                eprintln!("changed_ranges: {changed_ranges:#?}");
             }
+
+            eprintln!(
+                "applied_changed_ranges: {:#?}",
+                tree.changed_ranges(&old_tree).collect::<Vec<_>>()
+            );
         }
         let duration = time.elapsed();
         let duration_ms = duration.as_secs() * 1000 + duration.subsec_nanos() as u64 / 1000000;
