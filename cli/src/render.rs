@@ -7,7 +7,7 @@ use std::{
     io::{BufRead, Write},
     str::Chars,
 };
-use tree_sitter::{Node, Range, Tree, TreeCursor};
+use tree_sitter::{Node, Point, Range, Tree, TreeCursor};
 
 // ------------------------------------------------------------------------------------------------
 
@@ -419,32 +419,35 @@ impl<'a, W: Write> CstRenderer<'a, W> {
         }
 
         if self.flags.show_positions {
-            let start = node.start_position();
-            let end = node.end_position();
+            let Point {
+                row: start_row,
+                column: start_column,
+            } = node.start_position();
+            let Point {
+                row: end_row,
+                column: end_column,
+            } = node.end_position();
 
             let pos_color = {
-                if self.last_line_no != start.row {
+                if self.last_line_no != start_row {
                     self.color.pos1
                 } else {
                     self.color.pos2
                 }
             };
-            let pos = format!(
-                "{}:{:<2} - {}:{}",
-                start.row, start.column, end.row, end.column,
-            );
-
-            let indent = self.indent - pos.len();
+            let pos = format!("{start_row}:{start_column:<2} - {end_row}:{end_column:<2}");
             write!(
                 self.stdout,
-                "{}{pos}{}{}",
-                pos_color.prefix(),
-                pos_color.suffix(),
-                NODE_PAD.repeat(indent)
+                "{C}{pos}{R}",
+                C = pos_color.prefix(),
+                R = pos_color.suffix(),
             )?;
+
+            let indent = self.indent - pos.len();
+            write!(self.stdout, "{}", NODE_PAD.repeat(indent))?;
             self.render_dot_marks(&node)?;
 
-            self.last_line_no = start.row;
+            self.last_line_no = start_row;
         } else {
             self.write(&*NODE_PAD.repeat(self.indent).as_bytes())?;
             self.render_dot_marks(&node)?;
