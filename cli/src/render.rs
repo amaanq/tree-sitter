@@ -618,16 +618,16 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             self.write_colored(&*s, node_color)?;
         }
 
-        self.write(
-            format!(
-                // " -- {}, {}:{}",
-                // self.indent_shift,
-                " -- {}:{}",
-                node.start_byte(),
-                node.end_byte()
-            )
-            .as_bytes(),
-        )?;
+        // self.write(
+        //     format!(
+        //         // " -- {}, {}:{}",
+        //         // self.indent_shift,
+        //         " -- {}:{}",
+        //         node.start_byte(),
+        //         node.end_byte()
+        //     )
+        //     .as_bytes(),
+        // )?;
         Ok(())
     }
 
