@@ -88,6 +88,7 @@ pub fn parse_input(
     timeout: u64,
     cancellation_flag: Option<&AtomicUsize>,
     max_path_length: usize,
+    show_file_names: bool,
 ) -> Result<bool> {
     let mut parser = Parser::new();
     parser.set_language(input.language)?;

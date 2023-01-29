@@ -448,6 +448,7 @@ fn run() -> Result<()> {
                 matches.get_many_str("paths").map(IntoIterator::into_iter),
             )?;
             let max_path_length = inputs.max_path_length();
+            let show_file_names = inputs.len() > 1;
 
             let timeout = matches
                 .get_one::<String>("timeout")
@@ -479,6 +480,7 @@ fn run() -> Result<()> {
                     timeout,
                     Some(&cancellation_flag),
                     max_path_length,
+                    show_file_names,
                 )?;
 
                 if let Some(stats) = &mut stats {

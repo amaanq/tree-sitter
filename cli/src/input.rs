@@ -102,6 +102,10 @@ impl Inputs {
             Ok(Self(inputs))
         }
     }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl Deref for Inputs {
