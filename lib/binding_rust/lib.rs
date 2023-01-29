@@ -1969,7 +1969,7 @@ impl QueryCursor {
         text_provider: T,
     ) -> QueryCaptures<'a, 'tree, T> {
         let ptr = self.ptr.as_ptr();
-        unsafe { ffi::ts_query_cursor_exec(self.ptr.as_ptr(), query.ptr.as_ptr(), node.0) };
+        unsafe { ffi::ts_query_cursor_exec(ptr, query.ptr.as_ptr(), node.0) };
         QueryCaptures {
             ptr,
             query,
