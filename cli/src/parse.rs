@@ -7,6 +7,7 @@ use crate::render::{
     SExpressionFlags, SExpressionRenderer,
 };
 use crate::visitor::Visitor;
+use ansi_term::Color;
 use anyhow::{anyhow, bail, Result};
 use std::io::{self, Write};
 use std::sync::atomic::AtomicUsize;
@@ -88,7 +89,7 @@ pub fn parse_input(
     timeout: u64,
     cancellation_flag: Option<&AtomicUsize>,
     max_path_length: usize,
-    show_file_names: bool,
+    show_file_names: usize,
 ) -> Result<bool> {
     let mut parser = Parser::new();
     parser.set_language(input.language)?;
@@ -116,9 +117,9 @@ pub fn parse_input(
 
     let time = Instant::now();
 
-    let (encoding, has_bom) = Encoding::test_bytes(&input.source_code)
-        .map(|x| (x, true))
-        .unwrap_or((Encoding::UTF8, false));
+    let (encoding, bom_len) = Encoding::test_bytes(&input.source_code)
+        .map(|x| (x, x.bom().len()))
+        .unwrap_or((Encoding::UTF8, 0));
 
     // let tree = parser.parse(&input.source_code, None);
 
@@ -182,7 +183,7 @@ pub fn parse_input(
         let duration = time.elapsed();
         let duration_ms = duration.as_secs() * 1000 + duration.subsec_nanos() as u64 / 1000000;
 
-        let (lines_count_from_one, show_text) = match output {
+        let (lines_count_from_one, mut show_text) = match output {
             Some(OutputFormat::SExpression(flags)) => {
                 (flags.text.lines_count_from_one, flags.text.show)
             }
@@ -219,6 +220,8 @@ pub fn parse_input(
                 Ok(())
             }
 
+            let name_color = Color::RGB(38, 166, 154);
+
             #[cfg(not(unix))]
             let mut stdout = stdout.lock();
             #[cfg(unix)]
@@ -243,7 +246,22 @@ pub fn parse_input(
                             .encoding(encoding)
                             .perform(cursor.clone())
                     };
+                    if show_file_names > 0 {
+                        println!(
+                            "{C}{}{R}",
+                            input.origin,
+                            C = name_color.prefix(),
+                            R = name_color.suffix()
+                        )
+                    }
                     render_timing(func, flags.extra.render_timing)?;
+                    if show_text {
+                        text_render(&mut stdout, row_offset, &input.source_code[bom_len..])?;
+                        show_text = false;
+                    }
+                    if show_file_names > 1 {
+                        println!()
+                    }
                 }
                 Some(OutputFormat::Xml) => {
                     xml_render(&mut stdout, &mut cursor, &input.source_code)?;
@@ -279,12 +297,7 @@ pub fn parse_input(
                 }
             }
             if show_text {
-                let source_code = if has_bom {
-                    &input.source_code[encoding.bom().len()..]
-                } else {
-                    &input.source_code
-                };
-                text_render(&mut stdout, row_offset, source_code)?;
+                text_render(&mut stdout, row_offset, &input.source_code[bom_len..])?;
             }
         }
 
