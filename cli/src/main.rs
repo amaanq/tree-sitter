@@ -268,6 +268,7 @@ fn run() -> Result<()> {
             )
             .subcommand(
                 Command::new("highlight")
+                    .alias("hi")
                     .about("Highlight a file")
                     .arg(
                         Arg::new("html")
