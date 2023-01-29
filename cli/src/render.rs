@@ -459,7 +459,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                 )?;
             }
 
-            let indent = self.indent - pos_len;
+            let indent = self.indent.checked_sub(pos_len).unwrap_or(1);
             write!(self.stdout, "{}", NODE_PAD.repeat(indent))?;
             self.render_dot_marks(&node)?;
 
