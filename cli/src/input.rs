@@ -16,6 +16,20 @@ pub enum Input {
 
 pub struct Inputs(Vec<Input>);
 
+pub struct ParserInput {
+    pub source_code: Vec<u8>,
+    pub language: Language,
+    pub origin: String,
+}
+
+pub struct ParserInputs<'a> {
+    loader: &'a mut Loader,
+    scope: Option<&'a str>,
+    language_source_dir: Option<&'a Path>,
+    inputs: std::vec::IntoIter<Input>,
+    snippet_nr: usize,
+}
+
 impl Inputs {
     pub fn collect<'a>(
         paths_file: Option<&str>,
@@ -140,20 +154,6 @@ impl Inputs {
             snippet_nr: 0,
         }
     }
-}
-
-pub struct ParserInput {
-    pub source_code: Vec<u8>,
-    pub language: Language,
-    pub origin: String,
-}
-
-pub struct ParserInputs<'a> {
-    loader: &'a mut Loader,
-    scope: Option<&'a str>,
-    language_source_dir: Option<&'a Path>,
-    inputs: std::vec::IntoIter<Input>,
-    snippet_nr: usize,
 }
 
 impl Iterator for ParserInputs<'_> {
