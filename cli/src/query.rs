@@ -69,13 +69,28 @@ pub fn query_files_at_paths(
                 let capture = m.captures[capture_index];
                 let capture_index = capture.index;
                 let capture_name = &query.capture_names()[capture_index as usize];
-                let (pos, pos_c) = format_pos(&capture, &mut last_row, &c);
+                let (pos, pos_c, ml) = format_pos(&capture, &mut last_row, &c);
                 let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
+                let text = if ml {
+                    let capture_text = capture_text.lines().next().unwrap();
+                    format!(
+                        "{BK}`{CT}{capture_text}{BK}`{R}...",
+                        CT = c.text.prefix(),
+                        BK = c.backtick.prefix(),
+                        R = c.backtick.suffix()
+                    )
+                } else {
+                    format!(
+                        "{BK}`{CT}{capture_text}{BK}`{R}",
+                        CT = c.text.prefix(),
+                        BK = c.backtick.prefix(),
+                        R = c.backtick.suffix()
+                    )
+                };
                 writeln!(
                     &mut stdout,
-                    "{P}{pos:<18} {PI}{pattern_index:>3}{CL}:{CI}{capture_index:<3} {CN}{capture_name:<max_capture_len$} {BK}`{CT}{capture_text}{BK}`{R}",
-                    P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(),
-                    CN=c.bytes.prefix(), CT=c.text.prefix(), BK=c.backtick.prefix(), R=c.backtick.suffix(),
+                    "{P}{pos:<18} {PI}{pattern_index:>3}{CL}:{CI}{capture_index:<3} {CN}{capture_name:<max_capture_len$} {text}",
+                    P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                 )?;
                 results.push(query_testing::CaptureInfo {
                     name: capture_name.to_string(),
@@ -95,13 +110,28 @@ pub fn query_files_at_paths(
                     };
                     let capture_index = capture.index;
                     let capture_name = &query.capture_names()[capture_index as usize];
-                    let (pos, pos_c) = format_pos(capture, &mut last_row, &c);
+                    let (pos, pos_c, ml) = format_pos(capture, &mut last_row, &c);
                     let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
+                    let text = if ml {
+                        let capture_text = capture_text.lines().next().unwrap();
+                        format!(
+                            "{BK}`{CT}{capture_text}{BK}`{R}...",
+                            CT = c.text.prefix(),
+                            BK = c.backtick.prefix(),
+                            R = c.backtick.suffix()
+                        )
+                    } else {
+                        format!(
+                            "{BK}`{CT}{capture_text}{BK}`{R}",
+                            CT = c.text.prefix(),
+                            BK = c.backtick.prefix(),
+                            R = c.backtick.suffix()
+                        )
+                    };
                     writeln!(
                             &mut stdout,
-                            "{P}{pos:<18} {PI}{pattern_index:>3}{CL}:{CI}{capture_index:<3} {CN}{capture_name:<max_capture_len$} {BK}`{CT}{capture_text}{BK}`{R}",
-                            P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(),
-                            CN=c.bytes.prefix(), CT=c.text.prefix(), BK=c.backtick.prefix(), R=c.backtick.suffix(),
+                            "{P}{pos:<18} {PI}{pattern_index:>3}{CL}:{CI}{capture_index:<3} {CN}{capture_name:<max_capture_len$} {text}",
+                            P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                         )?;
                     results.push(query_testing::CaptureInfo {
                         name: capture_name.to_string(),
@@ -125,7 +155,11 @@ pub fn query_files_at_paths(
     Ok(())
 }
 
-fn format_pos(capture: &QueryCapture, last_row: &mut usize, colors: &Colors) -> (String, Style) {
+fn format_pos(
+    capture: &QueryCapture,
+    last_row: &mut usize,
+    colors: &Colors,
+) -> (String, Style, bool) {
     let Point {
         row: start_row,
         column: start_column,
@@ -143,5 +177,10 @@ fn format_pos(capture: &QueryCapture, last_row: &mut usize, colors: &Colors) -> 
     (
         format!("{start_row}:{start_column:<3} - {end_row}:{end_column}"),
         pos_c,
+        end_row > start_row,
     )
 }
+
+// TODO: query rendering improvements
+//   [ ] Implement a multiline capture_text unfolding with correct pos per line and backticked every line line in parsing tree
+//   [ ] Add a flag to control how to show capture_text like unfolded or not.
