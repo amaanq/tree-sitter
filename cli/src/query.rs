@@ -60,7 +60,7 @@ pub fn query_files_at_paths(
                 let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
                 writeln!(
                     &mut stdout,
-                    "    {pos:<15} pattern: {pattern_index:>2}, capture: {capture_index:<2} - {capture_name}, text: `{capture_text}`"
+                    "{pos:<15} pattern: {pattern_index:>2}, capture: {capture_index:<2} - {capture_name}, text: `{capture_text}`"
                 )?;
                 results.push(query_testing::CaptureInfo {
                     name: capture_name.to_string(),
@@ -71,7 +71,7 @@ pub fn query_files_at_paths(
         } else {
             for m in query_cursor.matches(&query, tree.root_node(), source_code.as_slice()) {
                 let pattern_index = m.pattern_index;
-                writeln!(&mut stdout, "  pattern: {}", pattern_index)?;
+                // writeln!(&mut stdout, "pattern: {pattern_index}")?;
                 for capture in m.captures {
                     let capture_index = capture.index;
                     let capture_name = &query.capture_names()[capture_index as usize];
@@ -88,7 +88,8 @@ pub fn query_files_at_paths(
                         let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
                         writeln!(
                             &mut stdout,
-                            "    {pos:<15} capture: {capture_index:2} - {capture_name}, text: `{capture_text}`")?;
+                            // "  {pos:<15} capture: {capture_index:2} - {capture_name}, text: `{capture_text}`")?;
+                            "{pos:<15} pattern: {pattern_index:>2}, capture: {capture_index:2} - {capture_name}, text: `{capture_text}`")?;
                     } else {
                         writeln!(&mut stdout, "    {pos:<15} capture: {capture_name}",)?;
                     }
