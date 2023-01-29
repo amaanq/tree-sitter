@@ -3,8 +3,8 @@
 use super::util;
 use crate::input::ParserInput;
 use crate::render::{
-    as_u16_slice, collect_node_ids, text_render, xml_render, CstFlags, CstRenderer, Encoding,
-    SExpressionFlags, SExpressionRenderer,
+    as_u16_slice, collect_node_ids, render_changed_ranges, render_text, xml_render, CstFlags,
+    CstRenderer, Encoding, SExpressionFlags, SExpressionRenderer,
 };
 use crate::visitor::Visitor;
 use ansi_term::Color;
@@ -13,7 +13,7 @@ use std::io::{self, Write};
 use std::sync::atomic::AtomicUsize;
 use std::time::{Duration, Instant};
 use std::{fmt, usize};
-use tree_sitter::{InputEdit, LogType, Parser, Point, Range, Tree};
+use tree_sitter::{InputEdit, LogType, Parser, Point, Tree};
 
 #[derive(Clone, Debug)]
 pub enum OutputFormat {
@@ -255,8 +255,11 @@ pub fn parse_input(
                         )
                     }
                     render_timing(func, flags.extra.render_timing)?;
+                    if let Some(ranges) = changed_ranges {
+                        render_changed_ranges(&mut stdout, &ranges)?;
+                    }
                     if show_text {
-                        text_render(&mut stdout, row_offset, &input.source_code[bom_len..])?;
+                        render_text(&mut stdout, row_offset, &input.source_code[bom_len..])?;
                         show_text = false;
                     }
                     if show_file_names > 1 {
@@ -267,37 +270,9 @@ pub fn parse_input(
                     xml_render(&mut stdout, &mut cursor, &input.source_code)?;
                 }
             }
-            if let Some(ranges) = changed_ranges {
-                let c = crate::render::Colors::new();
-                println!();
-                // println!(
-                //     "\n{C}Changed ranges:{R}",
-                //     C = c.field.prefix(),
-                //     R = c.field.suffix()
-                // );
-                for range in ranges {
-                    let Range {
-                        start_byte,
-                        end_byte,
-                        start_point:
-                            Point {
-                                row: start_row,
-                                column: start_column,
-                            },
-                        end_point:
-                            Point {
-                                row: end_row,
-                                column: end_column,
-                            },
-                    } = range;
-                    println!(
-                        "{P}{start_row}:{start_column:<2} - {end_row}:{end_column:<2} {B}{start_byte:3}:{end_byte}{R}",
-                        P=c.term.prefix(), B=c.bytes.prefix(), R=c.nonterm.suffix()
-                    );
-                }
-            }
+
             if show_text {
-                text_render(&mut stdout, row_offset, &input.source_code[bom_len..])?;
+                render_text(&mut stdout, row_offset, &input.source_code[bom_len..])?;
             }
         }
 

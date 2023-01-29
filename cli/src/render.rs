@@ -869,7 +869,7 @@ pub fn xml_render(stdout: &mut impl Write, cursor: &mut TreeCursor, text: &[u8])
 
 // ------------------------------------------------------------------------------------------------
 
-pub fn text_render(stdout: &mut impl Write, offset: usize, source_code: &[u8]) -> Result {
+pub fn render_text(stdout: &mut impl Write, offset: usize, source_code: &[u8]) -> Result {
     stdout.write_all(b"\n")?;
     let n_color = Color::Blue.normal();
     for (mut i, s) in BufRead::split(source_code, b'\n').enumerate() {
@@ -879,6 +879,39 @@ pub fn text_render(stdout: &mut impl Write, offset: usize, source_code: &[u8]) -
         stdout.write_all(b"\n")?;
     }
     stdout.flush()?;
+    Ok(())
+}
+
+// ------------------------------------------------------------------------------------------------
+
+pub fn render_changed_ranges(stdout: &mut impl Write, changed_ranges: &[Range]) -> Result {
+    let c = crate::render::Colors::new();
+    writeln!(stdout)?;
+    // println!(
+    //     "\n{C}Changed ranges:{R}",
+    //     C = c.field.prefix(),
+    //     R = c.field.suffix()
+    // );
+    for range in changed_ranges {
+        let Range {
+            start_byte,
+            end_byte,
+            start_point:
+                Point {
+                    row: start_row,
+                    column: start_column,
+                },
+            end_point:
+                Point {
+                    row: end_row,
+                    column: end_column,
+                },
+        } = range;
+        writeln!(stdout,
+            "{P}{start_row}:{start_column:<2} - {end_row}:{end_column:<2} {B}{start_byte:3}:{end_byte}{R}",
+            P=c.term.prefix(), B=c.bytes.prefix(), R=c.nonterm.suffix()
+        )?;
+    }
     Ok(())
 }
 
