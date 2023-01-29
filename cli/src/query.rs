@@ -1,4 +1,8 @@
-use crate::{query_testing, render};
+use crate::{
+    query_testing,
+    render::{self, Colors},
+};
+use ansi_term::{Color, Style};
 use anyhow::{Context, Result};
 use std::{
     fs,
@@ -6,7 +10,7 @@ use std::{
     ops::Range,
     path::{Path, PathBuf},
 };
-use tree_sitter::{Language, Parser, Point, Query, QueryCursor};
+use tree_sitter::{Language, Parser, Point, Query, QueryCapture, QueryCursor};
 
 pub fn query_files_at_paths(
     language: Language,
@@ -38,11 +42,18 @@ pub fn query_files_at_paths(
     parser.set_language(language)?;
 
     let c = render::Colors::new();
+    let name_color = Color::RGB(38, 166, 154);
 
     for path in paths {
         let mut results = Vec::new();
 
-        writeln!(&mut stdout, "{}", path.to_string_lossy())?;
+        writeln!(
+            &mut stdout,
+            "{C}{}{R}",
+            path.to_string_lossy(),
+            C = name_color.prefix(),
+            R = name_color.suffix()
+        )?;
 
         let source_code =
             fs::read(&path).with_context(|| format!("Error reading source file {:?}", path))?;
@@ -58,25 +69,10 @@ pub fn query_files_at_paths(
                 let capture = m.captures[capture_index];
                 let capture_index = capture.index;
                 let capture_name = &query.capture_names()[capture_index as usize];
-                let Point {
-                    row: start_row,
-                    column: start_column,
-                } = capture.node.start_position();
-                let Point {
-                    row: end_row,
-                    column: end_column,
-                } = capture.node.end_position();
-                let pos_c = if start_row != last_row {
-                    last_row = start_row;
-                    c.pos1
-                } else {
-                    c.pos2
-                };
-                let pos = format!("{start_row}:{start_column:<3} - {end_row}:{end_column}");
+                let (pos, pos_c) = format_pos(&capture, &mut last_row, &c);
                 let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
                 writeln!(
                     &mut stdout,
-                    // "{pos:<15} {pattern_index:>2}:{capture_index:<2} {capture_name:>20} `{capture_text}`"
                     "{P}{pos:<18} {PI}{pattern_index:>3}{CL}:{CI}{capture_index:<3} {CN}{capture_name:<max_capture_len$} {BK}`{CT}{capture_text}{BK}`{R}",
                     P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(),
                     CN=c.bytes.prefix(), CT=c.text.prefix(), BK=c.backtick.prefix(), R=c.backtick.suffix(),
@@ -89,39 +85,24 @@ pub fn query_files_at_paths(
             }
         } else {
             for m in query_cursor.matches(&query, tree.root_node(), source_code.as_slice()) {
-                let pattern_index = m.pattern_index;
-                // writeln!(&mut stdout, "pattern: {pattern_index}")?;
+                let mut pattern_index = usize::MAX;
                 for capture in m.captures {
-                    let capture_index = capture.index;
-                    let capture_name = &query.capture_names()[capture_index as usize];
-                    let Point {
-                        row: start_row,
-                        column: start_column,
-                    } = capture.node.start_position();
-                    let Point {
-                        row: end_row,
-                        column: end_column,
-                    } = capture.node.end_position();
-                    let pos_c = if start_row != last_row {
-                        last_row = start_row;
-                        c.pos1
+                    let pat_c = if pattern_index == usize::MAX {
+                        pattern_index = m.pattern_index;
+                        c.field
                     } else {
                         c.pos2
                     };
-                    let pos = format!("{start_row}:{start_column:<3} - {end_row}:{end_column}");
-                    if end_row == start_row {
-                        let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
-                        writeln!(
+                    let capture_index = capture.index;
+                    let capture_name = &query.capture_names()[capture_index as usize];
+                    let (pos, pos_c) = format_pos(capture, &mut last_row, &c);
+                    let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
+                    writeln!(
                             &mut stdout,
-                            // "  {pos:<15} capture: {capture_index:2} - {capture_name}, text: `{capture_text}`"
-                            // "{pos:<15} {pattern_index:>2}:{capture_index:<2} {capture_name:>20} `{capture_text}`"
                             "{P}{pos:<18} {PI}{pattern_index:>3}{CL}:{CI}{capture_index:<3} {CN}{capture_name:<max_capture_len$} {BK}`{CT}{capture_text}{BK}`{R}",
-                            P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(),
+                            P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(),
                             CN=c.bytes.prefix(), CT=c.text.prefix(), BK=c.backtick.prefix(), R=c.backtick.suffix(),
                         )?;
-                    } else {
-                        writeln!(&mut stdout, "    {pos:<15} {capture_name}")?;
-                    }
                     results.push(query_testing::CaptureInfo {
                         name: capture_name.to_string(),
                         start: capture.node.start_position(),
@@ -142,4 +123,25 @@ pub fn query_files_at_paths(
     }
 
     Ok(())
+}
+
+fn format_pos(capture: &QueryCapture, last_row: &mut usize, colors: &Colors) -> (String, Style) {
+    let Point {
+        row: start_row,
+        column: start_column,
+    } = capture.node.start_position();
+    let Point {
+        row: end_row,
+        column: end_column,
+    } = capture.node.end_position();
+    let pos_c = if start_row != *last_row {
+        *last_row = start_row;
+        colors.pos1
+    } else {
+        colors.pos2
+    };
+    (
+        format!("{start_row}:{start_column:<3} - {end_row}:{end_column}"),
+        pos_c,
+    )
 }
