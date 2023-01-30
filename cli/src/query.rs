@@ -184,3 +184,4 @@ fn format_pos(
 // TODO: query rendering improvements
 //   [ ] Implement a multiline capture_text unfolding with correct pos per line and backticked every line line in parsing tree
 //   [ ] Add a flag to control how to show capture_text like unfolded or not.
+//   [ ] Show an input name only if there multiple inputs.
