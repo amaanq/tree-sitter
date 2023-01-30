@@ -47,6 +47,10 @@ pub fn query_files_at_paths(
     for path in paths {
         let mut results = Vec::new();
 
+        let source_code =
+            fs::read(&path).with_context(|| format!("Error reading source file {:?}", path))?;
+        let tree = parser.parse(&source_code, None).unwrap();
+
         writeln!(
             &mut stdout,
             "{C}{}{R}",
@@ -54,10 +58,6 @@ pub fn query_files_at_paths(
             C = name_color.prefix(),
             R = name_color.suffix()
         )?;
-
-        let source_code =
-            fs::read(&path).with_context(|| format!("Error reading source file {:?}", path))?;
-        let tree = parser.parse(&source_code, None).unwrap();
 
         let mut last_row = usize::MAX;
 
