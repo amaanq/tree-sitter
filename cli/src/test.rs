@@ -207,7 +207,7 @@ fn run_tests(
                 print!("  ");
             }
             if actual == output {
-                println!("✓ {}", Colour::Green.paint(&name));
+                print_test_name('✓', &name, Colour::Green, indent_level);
                 if update {
                     let input = String::from_utf8(input).unwrap();
                     let output = format_sexp(&output);
@@ -218,9 +218,9 @@ fn run_tests(
                     let input = String::from_utf8(input).unwrap();
                     let output = format_sexp(&actual);
                     corrected_entries.push((name.clone(), input, output));
-                    println!("✓ {}", Colour::Blue.paint(&name));
+                    print_test_name('✓', &name, Colour::Blue, indent_level);
                 } else {
-                    println!("✗ {}", Colour::Red.paint(&name));
+                    print_test_name('✗', &name, Colour::Red, indent_level);
                 }
                 failures.push((name, actual, output));
             }
@@ -261,6 +261,19 @@ fn run_tests(
         }
     }
     Ok(())
+}
+
+fn print_test_name(mark: char, desc: &str, color: Colour, indent_level: i32) {
+    let mut lines = desc.lines();
+    if let Some(name) = lines.next() {
+        println!("{mark} {}", color.paint(name));
+    }
+    for desc in lines {
+        for _ in 0..indent_level + 1 {
+            print!("  ");
+        }
+        println!("{}", color.paint(desc));
+    }
 }
 
 fn format_sexp(sexp: &String) -> String {
