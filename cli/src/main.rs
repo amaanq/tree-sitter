@@ -450,6 +450,9 @@ fn run() -> Result<()> {
             )?;
             let max_path_length = inputs.max_path_length();
             let mut show_file_names = inputs.len();
+            if show_file_names == 1 {
+                show_file_names = 0;
+            }
 
             let timeout = matches
                 .get_one::<String>("timeout")
@@ -483,7 +486,9 @@ fn run() -> Result<()> {
                     max_path_length,
                     show_file_names,
                 )?;
-                show_file_names -= 1;
+                if show_file_names > 0 {
+                    show_file_names -= 1;
+                }
 
                 if let Some(stats) = &mut stats {
                     stats.total_parses += 1;
