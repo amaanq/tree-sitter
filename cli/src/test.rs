@@ -101,7 +101,8 @@ pub fn run_tests_at_path(
             }
 
             for (i, (name, ..)) in failures.iter().enumerate() {
-                println!("  {}. {}", i + 1, name);
+                let prefix = format!("  {}.", i + 1);
+                print_name(&prefix, name, None, 0);
             }
             Ok(())
         } else {
@@ -113,7 +114,9 @@ pub fn run_tests_at_path(
 
             print_diff_key();
             for (i, (name, actual, expected)) in failures.iter().enumerate() {
-                println!("\n  {}. {}:", i + 1, name);
+                println!("\n");
+                let prefix = format!("  {}.", i + 1);
+                print_name(&prefix, name, None, 0);
                 let actual = format_sexp_indented(&actual, 2);
                 let expected = format_sexp_indented(&expected, 2);
                 print_diff(&actual, &expected);
@@ -203,11 +206,8 @@ fn run_tests(
             if !has_fields {
                 actual = strip_sexp_fields(actual);
             }
-            for _ in 0..indent_level {
-                print!("  ");
-            }
             if actual == output {
-                print_test_name('✓', &name, Colour::Green, indent_level);
+                print_name("✓ ", &name, Some(Colour::Green), indent_level);
                 if update {
                     let input = String::from_utf8(input).unwrap();
                     let output = format_sexp(&output);
@@ -218,9 +218,9 @@ fn run_tests(
                     let input = String::from_utf8(input).unwrap();
                     let output = format_sexp(&actual);
                     corrected_entries.push((name.clone(), input, output));
-                    print_test_name('✓', &name, Colour::Blue, indent_level);
+                    print_name("✓ ", &name, Some(Colour::Blue), indent_level);
                 } else {
-                    print_test_name('✗', &name, Colour::Red, indent_level);
+                    print_name("✗ ", &name, Some(Colour::Red), indent_level);
                 }
                 failures.push((name, actual, output));
             }
@@ -263,16 +263,33 @@ fn run_tests(
     Ok(())
 }
 
-fn print_test_name(mark: char, desc: &str, color: Colour, indent_level: i32) {
-    let mut lines = desc.lines();
+fn print_name(prefix: &str, name: &str, color: Option<Colour>, indent_level: i32) {
+    let plen = 1 + prefix.chars().count() as i32;
+    let mut colored_line;
+    let mut lines = name.lines();
     if let Some(name) = lines.next() {
-        println!("{mark} {}", color.paint(name));
-    }
-    for desc in lines {
-        for _ in 0..indent_level + 1 {
+        for _ in 0..indent_level {
             print!("  ");
         }
-        println!("{}", color.paint(desc));
+        let line = if let Some(color) = color {
+            colored_line = color.paint(name).to_string();
+            &colored_line
+        } else {
+            name
+        };
+        println!("{prefix} {line}");
+    }
+    for desc in lines {
+        for _ in 0..indent_level * 2 + plen {
+            print!(" ");
+        }
+        let line = if let Some(color) = color {
+            colored_line = color.paint(desc).to_string();
+            &colored_line
+        } else {
+            desc
+        };
+        println!("{line}");
     }
 }
 
@@ -676,7 +693,7 @@ code
 ---
 
 ; Line start comment
-(a 
+(a
 ; ignore this
     (b)
     ; also ignore this
