@@ -522,10 +522,10 @@ impl<'a, W: Write> CstRenderer<'a, W> {
         if node.is_missing() {
             self.write_colored("MISSING: ", self.color.missing)?;
         }
+        if let Some(field_name) = context.field_name() {
+            write!(self.stdout, "{}: ", self.color.field.paint(field_name),)?;
+        }
         if node.is_named() {
-            if let Some(field_name) = context.field_name() {
-                write!(self.stdout, "{}: ", self.color.field.paint(field_name),)?;
-            }
             self.write_colored(node.kind(), node_color)?;
 
             if node.child_count() == 0
