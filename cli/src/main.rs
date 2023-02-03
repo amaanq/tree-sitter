@@ -452,29 +452,27 @@ fn run() -> Result<()> {
             let libdir = matches.get_one_str("libdir").or(libdir);
             let output = matches.get_one::<OutputFormat>("output");
             let scope = matches.get_one_str("scope");
-            let edits = matches.get_many_str("edits").unwrap_or(Vec::new());
+            let edits = matches.get_many_str("edits");
+            let edits = edits.as_ref().map(Vec::as_ref);
             let apply_edits = matches.get_flag("apply-edits");
-            let limit_ranges = matches.get_many_str("limit-ranges").unwrap_or(Vec::new());
+            let limit_ranges = matches.get_many_str("limit-ranges");
+            let limit_ranges = limit_ranges.as_ref().map(Vec::as_ref);
             let debug = matches.get_flag("debug");
             let debug_build = matches.get_flag("debug-build");
             let debug_graph = matches.get_flag("debug-graph");
             let quiet = matches.get_flag("quiet");
             let time = matches.get_flag("time");
-            let mut stats = match matches.get_flag("stat") {
-                true => Some(parse::Stats::default()),
-                _ => None,
-            };
-
+            let mut stats = matches.get_flag("stat").then(|| parse::Stats::default());
             let inputs = Inputs::collect(
                 matches.get_one_str("paths-file"),
                 matches.get_many_str("paths").map(IntoIterator::into_iter),
             )?;
 
             if inputs.len() > 1 {
-                if !limit_ranges.is_empty() {
+                if limit_ranges.is_some() {
                     bail!("The `--limit-range, -l` option currently only supported with a one input item");
                 }
-                if !edits.is_empty() {
+                if edits.is_some() {
                     bail!("The `--edit, -e` option currently only supported with a one input item");
                 }
             }
@@ -506,9 +504,9 @@ fn run() -> Result<()> {
                 let this_file_errored = parse::parse_input(
                     input?,
                     output,
-                    &edits,
+                    edits,
                     apply_edits,
-                    &limit_ranges,
+                    limit_ranges,
                     time,
                     quiet,
                     debug,

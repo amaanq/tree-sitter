@@ -4,7 +4,7 @@ use super::util;
 use crate::input::ParserInput;
 use crate::render::{
     as_u16_slice, collect_node_ids, render_changed_ranges, render_text, xml_render, CstFlags,
-    CstRenderer, Encoding, ScopeRange, SExpressionFlags, SExpressionRenderer,
+    CstRenderer, Encoding, SExpressionFlags, SExpressionRenderer, ScopeRange,
 };
 use crate::visitor::Visitor;
 use ansi_term::Color;
@@ -80,9 +80,9 @@ impl fmt::Display for Stats {
 pub fn parse_input(
     mut input: ParserInput,
     output: Option<&OutputFormat>,
-    edits: &[&str],
+    edits: Option<&[&str]>,
     apply_edits: bool,
-    limit_ranges: &[&str],
+    limit_ranges: Option<&[&str]>,
     print_time: bool,
     quiet: bool,
     debug: bool,
@@ -147,7 +147,7 @@ pub fn parse_input(
 
         let mut changed_ranges = None;
 
-        if !edits.is_empty() {
+        if let Some(edits) = edits {
             if debug_graph {
                 println!("BEFORE:\n{}", String::from_utf8_lossy(&input.source_code));
             }
@@ -206,8 +206,8 @@ pub fn parse_input(
 
         let mut cst_output = false;
         if !quiet {
-            let limit_ranges = (!limit_ranges.is_empty())
-                .then(|| ScopeRange::parse_inputs(&limit_ranges))
+            let limit_ranges = limit_ranges
+                .map(|limit_ranges| ScopeRange::parse_inputs(&limit_ranges))
                 .transpose()?;
 
             fn timeit<T>(mut func: impl FnMut() -> Result<T>) -> Result<(T, Duration)> {
