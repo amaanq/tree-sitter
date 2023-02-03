@@ -177,6 +177,7 @@ impl ScopeRange {
             };
             limit_ranges.push(limit_range);
         }
+        limit_ranges.sort_by(|a, b| b.start.cmp(&a.start));
         Ok(limit_ranges)
     }
 }
@@ -350,11 +351,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
     }
 
     pub fn limit_ranges(mut self, ranges: &'a Option<Vec<ScopeRange>>) -> Self {
-        let mut ranges = ranges.clone();
-        if let Some(ranges) = &mut ranges {
-            ranges.sort_by(|a, b| b.start.cmp(&a.start));
-        }
-        self.limit_ranges = ranges;
+        self.limit_ranges = ranges.clone();
         self
     }
 }

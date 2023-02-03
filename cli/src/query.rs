@@ -1,9 +1,9 @@
 use crate::{
     query_testing,
-    render::{self, Colors},
+    render::{self, Colors, ScopeRange},
 };
 use ansi_term::{Color, Style};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use std::{
     fs,
     io::{self, Write},
@@ -18,6 +18,7 @@ pub fn query_files_at_paths(
     query_path: &Path,
     ordered_captures: bool,
     range: Option<Range<usize>>,
+    limit_ranges: &[&str],
     should_test: bool,
 ) -> Result<()> {
     let stdout = io::stdout();
@@ -43,6 +44,15 @@ pub fn query_files_at_paths(
 
     let c = render::Colors::new();
     let name_color = Color::RGB(38, 166, 154);
+
+    let limit_ranges = {
+        if paths.len() > 1 {
+            bail!("The `--limit-range` currently only supported with a one input item");
+        }
+        (!limit_ranges.is_empty())
+            .then(|| ScopeRange::parse_inputs(&limit_ranges))
+            .transpose()?
+    };
 
     for path in paths {
         let mut results = Vec::new();

@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use clap::{crate_authors, crate_description, Arg, ArgAction, ArgMatches, Command};
 use loader::Loader;
 use std::path::{Path, PathBuf};
@@ -77,6 +77,14 @@ fn run() -> Result<()> {
         .long("scope")
         .value_name("source.*")
         .num_args(1);
+
+    let limit_ranges_arg = Arg::new("limit-ranges")
+        .help("Limit output to a range")
+        .long("limit-range")
+        .short('l')
+        .num_args(2)
+        .value_names(["start_row:start_column", "end_row:end_column"])
+        .action(ArgAction::Append);
 
     let time_arg = Arg::new("time")
         .help("Measure execution time")
@@ -189,15 +197,7 @@ fn run() -> Result<()> {
                             .short('a')
                             .action(ArgAction::SetTrue),
                     )
-                    .arg(
-                        Arg::new("limit-ranges")
-                            .help("Limit output to a range")
-                            .long("limit-range")
-                            .short('l')
-                            .num_args(2)
-                            .value_names(["start_row:start_column", "end_row:end_column"])
-                            .action(ArgAction::Append),
-                    )
+                    .arg(&limit_ranges_arg)
                     .arg(
                         Arg::new("timeout")
                             .help("Interrupt the parsing process by timeout (µs)")
@@ -228,8 +228,20 @@ fn run() -> Result<()> {
                             .index(1)
                             .required(true),
                     )
-                    .arg(&paths_file_arg)
                     .arg(&paths_arg.clone().index(2))
+                    .arg(&scope_arg)
+                    .arg(&paths_file_arg)
+                    .arg(
+                        Arg::new("captures")
+                        .long("captures")
+                        .short('c')
+                        .action(ArgAction::SetTrue)
+                        .help("Iterate over all of the individual captures in the order that they appear")
+                        .long_help(concat!(
+                            "Iterate over all of the individual captures in the order that they appear.\n",
+                            "This is useful if you don't care about which pattern matched, and just want a single,\n",
+                            "ordered sequence of captures.")
+                        ))
                     .arg(
                         Arg::new("byte-range")
                             .long("byte-range")
@@ -237,8 +249,7 @@ fn run() -> Result<()> {
                             .num_args(1)
                             .help("The range of byte offsets in which the query will be executed"),
                     )
-                    .arg(&scope_arg)
-                    .arg(Arg::new("captures").long("captures").short('c').action(ArgAction::SetTrue))
+                    .arg(&limit_ranges_arg)
                     .arg(Arg::new("test").long("test").action(ArgAction::SetTrue))
                     .arg(libdir_arg.clone().hide(true)),
             )
@@ -458,6 +469,16 @@ fn run() -> Result<()> {
                 matches.get_one_str("paths-file"),
                 matches.get_many_str("paths").map(IntoIterator::into_iter),
             )?;
+
+            if inputs.len() > 1 {
+                if !limit_ranges.is_empty() {
+                    bail!("The `--limit-range, -l` option currently only supported with a one input item");
+                }
+                if !edits.is_empty() {
+                    bail!("The `--edit, -e` option currently only supported with a one input item");
+                }
+            }
+
             let max_path_length = inputs.max_path_length();
             let mut show_file_names = inputs.len();
             if show_file_names == 1 {
@@ -534,12 +555,21 @@ fn run() -> Result<()> {
                 let r: Vec<&str> = br.split(":").collect();
                 r[0].parse().unwrap()..r[1].parse().unwrap()
             });
+            let limit_ranges = matches.get_many_str("limit-ranges").unwrap_or(Vec::new());
             let loader_config = config.get()?;
             let mut loader = loader_with_libdir(libdir)?;
             loader.find_all_languages(&loader_config)?;
             let language =
                 loader.select_language(Some(&current_dir), scope, Some(Path::new(&paths[0])))?;
-            query::query_files_at_paths(language, paths, query_path, captures, range, should_test)?;
+            query::query_files_at_paths(
+                language,
+                paths,
+                query_path,
+                captures,
+                range,
+                &limit_ranges,
+                should_test,
+            )?;
         }
 
         Some(("tags", matches)) => {
