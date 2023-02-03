@@ -430,41 +430,9 @@ impl<W: Write> Visitor for CstRenderer<'_, W> {
     fn on_visit(&mut self, context: &mut Context) -> Result {
         if context.node().is_named() || self.show_all() {
             if !context.traversed() {
-                // Implement a range display logic
-                let mut hide_row = false;
-                let mut draw_extra_lf = false;
-                if let Some(ranges) = &mut self.limit_ranges {
-                    if ranges.is_empty() {
-                        hide_row = true;
-                    } else {
-                        let node_start = context.node().start_position();
-                        if let Some(range) = ranges.last() {
-                            if node_start < range.start || node_start >= range.end {
-                                hide_row = true;
-                            }
-                            if node_start >= range.end {
-                                ranges.pop();
-                                if !ranges.is_empty() {
-                                    draw_extra_lf = true;
-                                }
-                                if let Some(range) = ranges.last() {
-                                    if node_start < range.start {
-                                        hide_row = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if draw_extra_lf {
-                    self.lf()?;
-                }
-
-                if hide_row {
+                if self.skip_node(context)? {
                     return Ok(());
                 }
-
                 self.indent(&context)?;
                 self.node(&context)?;
                 self.lf()?;
@@ -478,6 +446,46 @@ const NODE_PAD: &str = " ";
 const MULTILINE_PAD: &str = " ";
 
 impl<'a, W: Write> CstRenderer<'a, W> {
+    #[inline(always)]
+    fn skip_node(&mut self, context: &Context) -> anyhow::Result<bool> {
+        // Implement a range display logic
+        let mut hide_row = false;
+        let mut draw_extra_lf = false;
+        if let Some(ranges) = &mut self.limit_ranges {
+            if ranges.is_empty() {
+                hide_row = true;
+            } else {
+                let node_start = context.node().start_position();
+                if let Some(range) = ranges.last() {
+                    if node_start < range.start || node_start >= range.end {
+                        hide_row = true;
+                    }
+                    if node_start >= range.end {
+                        ranges.pop();
+                        if !ranges.is_empty() {
+                            draw_extra_lf = true;
+                        }
+                        if let Some(range) = ranges.last() {
+                            if node_start < range.start {
+                                hide_row = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if draw_extra_lf {
+            self.lf()?;
+        }
+
+        if hide_row {
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
     #[inline(always)]
     fn indent(&mut self, context: &Context) -> Result {
         self.indent_base = self.indent_shift + self.indent_level * 2;
