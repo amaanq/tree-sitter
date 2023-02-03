@@ -206,7 +206,8 @@ pub fn parse_input(
 
         let mut cst_output = false;
         if !quiet {
-            let limit_ranges = limit_ranges.as_ref()
+            let limit_ranges = limit_ranges
+                .as_ref()
                 .map(|limit_ranges| ScopeRange::parse_inputs(&limit_ranges))
                 .transpose()?;
 

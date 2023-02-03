@@ -49,7 +49,8 @@ pub fn query_files_at_paths(
         if paths.len() > 1 {
             bail!("The `--limit-range` currently only supported with a one input item");
         }
-        limit_ranges.as_ref()
+        limit_ranges
+            .as_ref()
             .map(|limit_ranges| ScopeRange::parse_inputs(&limit_ranges))
             .transpose()?
     };

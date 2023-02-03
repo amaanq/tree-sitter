@@ -228,7 +228,7 @@ impl ScopeRange {
                                     }
                                 }
                                 true => {
-                                    let start = &start[..start.len()];
+                                    let start = &start[..start.len().saturating_sub(1)];
                                     if start.ends_with("-") {
                                         bail!(
                                             "It's not allowed to use `-` and `@` on a point: {start}"
@@ -565,12 +565,20 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                 hide_row = true;
             } else {
                 let node_start = context.node().start_position();
-                let (ranges, tail_one) = ranges.split_at(ranges.len().saturating_sub(1));
                 // dbg!(&ranges, &tail_one);
-                if let Some(range) = tail_one.last() {
-                    let (range_start, range_end) = match range {
-                        ScopeRange::Range { start, end } => (start, end),
-                        ScopeRange::Node { start: _ } => todo!(),
+                if let Some((last, ranges)) = ranges.split_last_mut() {
+                    if let ScopeRange::Node { start } = last {
+                        if node_start >= *start {
+                            *last = ScopeRange::Range {
+                                start: *start,
+                                end: context.node().end_position(),
+                            };
+                        }
+                    };
+
+                    let (range_start, range_end) = match last {
+                        ScopeRange::Range { start, end } => (&*start, &*end),
+                        ScopeRange::Node { start } => (&*start, &*start),
                         ScopeRange::ErrorPath => todo!(),
                         ScopeRange::Error => todo!(),
                     };
@@ -586,7 +594,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                         if let Some(range) = ranges.last() {
                             let range_start = match range {
                                 ScopeRange::Range { start, .. } => start,
-                                ScopeRange::Node { start: _ } => todo!(),
+                                ScopeRange::Node { start } => start,
                                 ScopeRange::ErrorPath => todo!(),
                                 ScopeRange::Error => todo!(),
                             };
