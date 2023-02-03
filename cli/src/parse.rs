@@ -4,7 +4,7 @@ use super::util;
 use crate::input::ParserInput;
 use crate::render::{
     as_u16_slice, collect_node_ids, render_changed_ranges, render_text, xml_render, CstFlags,
-    CstRenderer, Encoding, SExpressionFlags, SExpressionRenderer,
+    CstRenderer, Encoding, ScopeRange, SExpressionFlags, SExpressionRenderer,
 };
 use crate::visitor::Visitor;
 use ansi_term::Color;
@@ -80,8 +80,9 @@ impl fmt::Display for Stats {
 pub fn parse_input(
     mut input: ParserInput,
     output: Option<&OutputFormat>,
-    edits: &Vec<&str>,
+    edits: &[&str],
     apply_edits: bool,
+    limit_ranges: &[&str],
     print_time: bool,
     quiet: bool,
     debug: bool,
@@ -205,6 +206,10 @@ pub fn parse_input(
 
         let mut cst_output = false;
         if !quiet {
+            let limit_ranges = (!limit_ranges.is_empty())
+                .then(|| ScopeRange::parse_inputs(&limit_ranges))
+                .transpose()?;
+
             fn timeit<T>(mut func: impl FnMut() -> Result<T>) -> Result<(T, Duration)> {
                 let time = Instant::now();
                 let result = func()?;
@@ -243,6 +248,7 @@ pub fn parse_input(
                         CstRenderer::new(&mut stdout, &input.source_code, flags)
                             .original_nodes(&node_ids)
                             .changed_ranges(&changed_ranges)
+                            .limit_ranges(&limit_ranges)
                             .encoding(encoding)
                             .perform(cursor.clone())
                     };

@@ -1,6 +1,6 @@
 use crate::visitor::{Context, Result, Visitor};
 use ansi_term::{Color, Style};
-use anyhow::bail;
+use anyhow::{bail, Ok};
 use std::{
     collections::HashSet,
     fmt::Write as _,
@@ -153,6 +153,34 @@ impl CstFlags {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ScopeRange {
+    pub start: Point,
+    pub end: Point,
+}
+
+impl ScopeRange {
+    pub fn parse_inputs(inputs: &[&str]) -> anyhow::Result<Vec<Self>> {
+        let mut ranges = inputs.iter();
+        let mut limit_ranges = Vec::with_capacity(inputs.len().saturating_div(2));
+        while let Some(start) = ranges.next() {
+            let end = ranges.next().unwrap();
+            let (start_row, start_column) = start
+                .split_once(':')
+                .expect(format!("Start point should have a format `row:col`: `{start}`").as_str());
+            let (end_row, end_column) = end
+                .split_once(':')
+                .expect(format!("End point should have a format `row:col`: `{end}`").as_str());
+            let limit_range = ScopeRange {
+                start: Point::new(start_row.parse()?, start_column.parse()?),
+                end: Point::new(end_row.parse()?, end_column.parse()?),
+            };
+            limit_ranges.push(limit_range);
+        }
+        Ok(limit_ranges)
+    }
+}
+
 // ------------------------------------------------------------------------------------------------
 
 pub struct SExpressionRenderer<'a, W: Write> {
@@ -280,6 +308,7 @@ pub struct CstRenderer<'a, W: Write> {
     last_line_no: usize,
     original_nodes: &'a Option<HashSet<usize>>,
     changed_ranges: &'a Option<Vec<Range>>,
+    limit_ranges: Option<Vec<ScopeRange>>,
     flags: &'a CstFlags,
     encoding: Encoding,
     buf: String,
@@ -298,6 +327,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             last_line_no: usize::MAX,
             original_nodes: &None,
             changed_ranges: &None,
+            limit_ranges: None,
             flags,
             encoding: Encoding::UTF8,
             buf: String::with_capacity(1024),
@@ -316,6 +346,15 @@ impl<'a, W: Write> CstRenderer<'a, W> {
 
     pub fn changed_ranges(mut self, ranges: &'a Option<Vec<Range>>) -> Self {
         self.changed_ranges = ranges;
+        self
+    }
+
+    pub fn limit_ranges(mut self, ranges: &'a Option<Vec<ScopeRange>>) -> Self {
+        let mut ranges = ranges.clone();
+        if let Some(ranges) = &mut ranges {
+            ranges.sort_by(|a, b| b.start.cmp(&a.start));
+        }
+        self.limit_ranges = ranges;
         self
     }
 }
@@ -394,6 +433,41 @@ impl<W: Write> Visitor for CstRenderer<'_, W> {
     fn on_visit(&mut self, context: &mut Context) -> Result {
         if context.node().is_named() || self.show_all() {
             if !context.traversed() {
+                // Implement a range display logic
+                let mut hide_row = false;
+                let mut draw_extra_lf = false;
+                if let Some(ranges) = &mut self.limit_ranges {
+                    if ranges.is_empty() {
+                        hide_row = true;
+                    } else {
+                        let node_start = context.node().start_position();
+                        if let Some(range) = ranges.last() {
+                            if node_start < range.start || node_start >= range.end {
+                                hide_row = true;
+                            }
+                            if node_start >= range.end {
+                                ranges.pop();
+                                if !ranges.is_empty() {
+                                    draw_extra_lf = true;
+                                }
+                                if let Some(range) = ranges.last() {
+                                    if node_start < range.start {
+                                        hide_row = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if draw_extra_lf {
+                    self.lf()?;
+                }
+
+                if hide_row {
+                    return Ok(());
+                }
+
                 self.indent(&context)?;
                 self.node(&context)?;
                 self.lf()?;

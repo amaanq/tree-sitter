@@ -190,6 +190,15 @@ fn run() -> Result<()> {
                             .action(ArgAction::SetTrue),
                     )
                     .arg(
+                        Arg::new("limit-ranges")
+                            .help("Limit output to a range")
+                            .long("limit-range")
+                            .short('l')
+                            .num_args(2)
+                            .value_names(["start_row:start_column", "end_row:end_column"])
+                            .action(ArgAction::Append),
+                    )
+                    .arg(
                         Arg::new("timeout")
                             .help("Interrupt the parsing process by timeout (µs)")
                             .long("timeout")
@@ -434,6 +443,7 @@ fn run() -> Result<()> {
             let scope = matches.get_one_str("scope");
             let edits = matches.get_many_str("edits").unwrap_or(Vec::new());
             let apply_edits = matches.get_flag("apply-edits");
+            let limit_ranges = matches.get_many_str("limit-ranges").unwrap_or(Vec::new());
             let debug = matches.get_flag("debug");
             let debug_build = matches.get_flag("debug-build");
             let debug_graph = matches.get_flag("debug-graph");
@@ -477,6 +487,7 @@ fn run() -> Result<()> {
                     output,
                     &edits,
                     apply_edits,
+                    &limit_ranges,
                     time,
                     quiet,
                     debug,
