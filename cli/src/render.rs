@@ -1,6 +1,6 @@
 use crate::visitor::{Context, Result, Visitor};
 use ansi_term::{Color, Style};
-use anyhow::{bail, Ok};
+use anyhow::bail;
 use std::{
     collections::HashSet,
     fmt::Write as _,
@@ -187,58 +187,67 @@ impl ScopeRange {
                 }
                 start => {
                     if input.len() == 1 {
-                        match (start.starts_with("-"), start.ends_with("-")) {
-                            (true, true) => {
-                                bail!("It's not allowed to use `-` and `@` on a point: {start}")
-                            }
-                            (true, false) => {
-                                let start = &start[1..];
-                                if let Some((start_row, start_column)) = start.split_once(':') {
-                                    ScopeRange::Range {
-                                        start: Point::default(),
-                                        end: Point::new(
-                                            start_row.parse().unwrap_or_default(),
-                                            start_column.parse().unwrap_or_default(),
-                                        ),
-                                    }
-                                } else {
-                                    ScopeRange::Range {
-                                        start: Point::default(),
-                                        end: Point::new(start.parse().unwrap_or_default(), 0),
-                                    }
+                        match start.ends_with("-") {
+                            true => {
+                                let start = &start[..start.len().saturating_sub(1)];
+                                if start.ends_with("@") {
+                                    bail!(
+                                        "It's not allowed to use `-` and `@` on a point: {start}"
+                                    );
                                 }
-                            }
-                            (false, true) => {
-                                let start = &start[..start.len()];
                                 if let Some((start_row, start_column)) = start.split_once(':') {
                                     ScopeRange::Range {
-                                        end: Point::default(),
                                         start: Point::new(
-                                            start_row.parse().unwrap_or_default(),
-                                            start_column.parse().unwrap_or_default(),
+                                            start_row.parse()?,
+                                            start_column.parse()?,
                                         ),
+                                        end: Point::new(usize::MAX, usize::MAX),
                                     }
                                 } else {
                                     ScopeRange::Range {
-                                        end: Point::default(),
-                                        start: Point::new(start.parse().unwrap_or_default(), 0),
+                                        start: Point::new(start.parse()?, 0),
+                                        end: Point::new(usize::MAX, usize::MAX),
                                     }
                                 }
                             }
-                            (false, false) => {
-                                if let Some((start_row, start_column)) = start.split_once(':') {
-                                    ScopeRange::Node {
-                                        start: Point::new(
-                                            start_row.parse().unwrap_or_default(),
-                                            start_column.parse().unwrap_or_default(),
-                                        ),
-                                    }
-                                } else {
-                                    ScopeRange::Node {
-                                        start: Point::new(start.parse().unwrap_or_default(), 0),
+                            false => match start.ends_with("@") {
+                                false => {
+                                    if let Some((start_row, start_column)) = start.split_once(':') {
+                                        ScopeRange::Range {
+                                            start: Point::default(),
+                                            end: Point::new(
+                                                start_row.parse()?,
+                                                start_column.parse()?,
+                                            ),
+                                        }
+                                    } else {
+                                        ScopeRange::Range {
+                                            start: Point::default(),
+                                            end: Point::new(start.parse()?, 0),
+                                        }
                                     }
                                 }
-                            }
+                                true => {
+                                    let start = &start[..start.len()];
+                                    if start.ends_with("-") {
+                                        bail!(
+                                            "It's not allowed to use `-` and `@` on a point: {start}"
+                                        );
+                                    }
+                                    if let Some((start_row, start_column)) = start.split_once(':') {
+                                        ScopeRange::Node {
+                                            start: Point::new(
+                                                start_row.parse()?,
+                                                start_column.parse()?,
+                                            ),
+                                        }
+                                    } else {
+                                        ScopeRange::Node {
+                                            start: Point::new(start.parse()?, 0),
+                                        }
+                                    }
+                                }
+                            },
                         }
                     } else {
                         let end = points.next().unwrap();
@@ -556,7 +565,8 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                 hide_row = true;
             } else {
                 let node_start = context.node().start_position();
-                let (ranges, tail_one) = ranges.split_at(ranges.len());
+                let (ranges, tail_one) = ranges.split_at(ranges.len().saturating_sub(1));
+                // dbg!(&ranges, &tail_one);
                 if let Some(range) = tail_one.last() {
                     let (range_start, range_end) = match range {
                         ScopeRange::Range { start, end } => (start, end),
