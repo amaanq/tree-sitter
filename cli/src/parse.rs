@@ -82,7 +82,7 @@ pub fn parse_input(
     output: Option<&OutputFormat>,
     edits: Option<&[&str]>,
     apply_edits: bool,
-    limit_ranges: Option<&[&str]>,
+    limit_ranges: Option<&[&[&str]]>,
     print_time: bool,
     quiet: bool,
     debug: bool,

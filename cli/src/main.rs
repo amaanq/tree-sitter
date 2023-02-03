@@ -82,7 +82,7 @@ fn run() -> Result<()> {
         .help("Limit output to a range")
         .long("limit-range")
         .short('l')
-        .num_args(2)
+        .num_args(1..=2)
         .value_names(["start_row:start_column", "end_row:end_column"])
         .action(ArgAction::Append);
 
@@ -455,8 +455,8 @@ fn run() -> Result<()> {
             let edits = matches.get_many_str("edits");
             let edits = edits.as_ref().map(Vec::as_ref);
             let apply_edits = matches.get_flag("apply-edits");
-            let limit_ranges = matches.get_many_str("limit-ranges");
-            let limit_ranges = limit_ranges.as_ref().map(Vec::as_ref);
+            let limit_ranges = matches.get_occurrences_str("limit-ranges");
+            let limit_ranges = limit_ranges.as_ref().map(|v| v.as_ref().map(Vec::as_ref));
             let debug = matches.get_flag("debug");
             let debug_build = matches.get_flag("debug-build");
             let debug_graph = matches.get_flag("debug-graph");
@@ -553,7 +553,9 @@ fn run() -> Result<()> {
                 let r: Vec<&str> = br.split(":").collect();
                 r[0].parse().unwrap()..r[1].parse().unwrap()
             });
-            let limit_ranges = matches.get_many_str("limit-ranges").unwrap_or(Vec::new());
+            let limit_ranges = matches.get_occurrences_str("limit-ranges");
+            let limit_ranges = limit_ranges.as_ref().map(|v| v.as_ref().map(Vec::as_ref));
+
             let loader_config = config.get()?;
             let mut loader = loader_with_libdir(libdir)?;
             loader.find_all_languages(&loader_config)?;
@@ -565,7 +567,7 @@ fn run() -> Result<()> {
                 query_path,
                 captures,
                 range,
-                &limit_ranges,
+                limit_ranges,
                 should_test,
             )?;
         }
@@ -712,6 +714,7 @@ fn loader_with_libdir(libdir: Option<&str>) -> Result<Loader> {
 trait ArgStr<'s> {
     fn get_one_str(&'s self, id: &str) -> Option<&'s str>;
     fn get_many_str(&'s self, id: &str) -> Option<Vec<&'s str>>;
+    fn get_occurrences_str(&'s self, id: &str) -> Option<Vec<Vec<&'s str>>>;
 }
 
 impl<'s> ArgStr<'s> for ArgMatches {
@@ -722,5 +725,10 @@ impl<'s> ArgStr<'s> for ArgMatches {
     fn get_many_str(&'s self, id: &str) -> Option<Vec<&'s str>> {
         self.get_many::<String>(id)
             .map(|v| v.map(|s| &**s).collect())
+    }
+
+    fn get_occurrences_str(&'s self, id: &str) -> Option<Vec<Vec<&'s str>>> {
+        self.get_occurrences::<String>(id)
+            .map(|v| v.map(|o| o.into_iter().map(|s| &**s).collect()).collect())
     }
 }

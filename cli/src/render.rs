@@ -154,30 +154,129 @@ impl CstFlags {
 }
 
 #[derive(Debug, Clone)]
-pub struct ScopeRange {
-    pub start: Point,
-    pub end: Point,
+pub enum ScopeRange {
+    Range { start: Point, end: Point },
+    Node { start: Point },
+    ErrorPath,
+    Error,
 }
 
 impl ScopeRange {
-    pub fn parse_inputs(inputs: &[&str]) -> anyhow::Result<Vec<Self>> {
+    pub fn parse_inputs(inputs: &[&[&str]]) -> anyhow::Result<Vec<Self>> {
         let mut ranges = inputs.iter();
         let mut limit_ranges = Vec::with_capacity(inputs.len().saturating_div(2));
-        while let Some(start) = ranges.next() {
-            let end = ranges.next().unwrap();
-            let (start_row, start_column) = start
-                .split_once(':')
-                .expect(format!("Start point should have a format `row:col`: `{start}`").as_str());
-            let (end_row, end_column) = end
-                .split_once(':')
-                .expect(format!("End point should have a format `row:col`: `{end}`").as_str());
-            let limit_range = ScopeRange {
-                start: Point::new(start_row.parse()?, start_column.parse()?),
-                end: Point::new(end_row.parse()?, end_column.parse()?),
+        while let Some(input) = ranges.next() {
+            let mut points = input.iter();
+            let start = points.next().unwrap();
+            let limit_range = match *start {
+                "error" => {
+                    if input.len() == 1 && inputs.len() == 1 {
+                        limit_ranges.push(ScopeRange::Error);
+                        return Ok(limit_ranges);
+                    } else {
+                        bail!("The `--limit-range error` can only be used standalone");
+                    }
+                }
+                "error-path" => {
+                    if input.len() == 1 && inputs.len() == 1 {
+                        limit_ranges.push(ScopeRange::ErrorPath);
+                        return Ok(limit_ranges);
+                    } else {
+                        bail!("The `--limit-range error-path` can only be used standalone");
+                    }
+                }
+                start => {
+                    if input.len() == 1 {
+                        match (start.starts_with("-"), start.ends_with("-")) {
+                            (true, true) => {
+                                bail!("It's not allowed to use `-` and `@` on a point: {start}")
+                            }
+                            (true, false) => {
+                                let start = &start[1..];
+                                if let Some((start_row, start_column)) = start.split_once(':') {
+                                    ScopeRange::Range {
+                                        start: Point::default(),
+                                        end: Point::new(
+                                            start_row.parse().unwrap_or_default(),
+                                            start_column.parse().unwrap_or_default(),
+                                        ),
+                                    }
+                                } else {
+                                    ScopeRange::Range {
+                                        start: Point::default(),
+                                        end: Point::new(start.parse().unwrap_or_default(), 0),
+                                    }
+                                }
+                            }
+                            (false, true) => {
+                                let start = &start[..start.len()];
+                                if let Some((start_row, start_column)) = start.split_once(':') {
+                                    ScopeRange::Range {
+                                        end: Point::default(),
+                                        start: Point::new(
+                                            start_row.parse().unwrap_or_default(),
+                                            start_column.parse().unwrap_or_default(),
+                                        ),
+                                    }
+                                } else {
+                                    ScopeRange::Range {
+                                        end: Point::default(),
+                                        start: Point::new(start.parse().unwrap_or_default(), 0),
+                                    }
+                                }
+                            }
+                            (false, false) => {
+                                if let Some((start_row, start_column)) = start.split_once(':') {
+                                    ScopeRange::Node {
+                                        start: Point::new(
+                                            start_row.parse().unwrap_or_default(),
+                                            start_column.parse().unwrap_or_default(),
+                                        ),
+                                    }
+                                } else {
+                                    ScopeRange::Node {
+                                        start: Point::new(start.parse().unwrap_or_default(), 0),
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        let end = points.next().unwrap();
+                        match (start.split_once(":"), end.split_once(":")) {
+                            (None, None) => ScopeRange::Range {
+                                start: Point::new(start.parse()?, 0),
+                                end: Point::new(end.parse()?, 0),
+                            },
+                            (None, Some((end_row, end_column))) => ScopeRange::Range {
+                                start: Point::new(start.parse()?, 0),
+                                end: Point::new(end_row.parse()?, end_column.parse()?),
+                            },
+                            (Some((start_row, start_column)), None) => ScopeRange::Range {
+                                start: Point::new(start_row.parse()?, start_column.parse()?),
+                                end: Point::new(end.parse()?, 0),
+                            },
+                            (Some((start_row, start_column)), Some((end_row, end_column))) => {
+                                ScopeRange::Range {
+                                    start: Point::new(start_row.parse()?, start_column.parse()?),
+                                    end: Point::new(end_row.parse()?, end_column.parse()?),
+                                }
+                            }
+                        }
+                    }
+                }
             };
             limit_ranges.push(limit_range);
         }
-        limit_ranges.sort_by(|a, b| b.start.cmp(&a.start));
+        limit_ranges.sort_by(|a, b| {
+            use ScopeRange::*;
+            match (a, b) {
+                (Range { start: a, .. }, Range { start: b, .. })
+                | (Range { start: a, .. }, Node { start: b })
+                | (Node { start: a }, Range { start: b, .. })
+                | (Node { start: a }, Node { start: b }) => b.cmp(&a),
+                _ => unreachable!("Sorting of `error` or `error-path` cases shouldn't happen"),
+            }
+        });
         Ok(limit_ranges)
     }
 }
@@ -449,6 +548,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
     #[inline(always)]
     fn skip_node(&mut self, context: &Context) -> anyhow::Result<bool> {
         // Implement a range display logic
+        let mut pop = false;
         let mut hide_row = false;
         let mut draw_extra_lf = false;
         if let Some(ranges) = &mut self.limit_ranges {
@@ -456,22 +556,40 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                 hide_row = true;
             } else {
                 let node_start = context.node().start_position();
-                if let Some(range) = ranges.last() {
-                    if node_start < range.start || node_start >= range.end {
+                let (ranges, tail_one) = ranges.split_at(ranges.len());
+                if let Some(range) = tail_one.last() {
+                    let (range_start, range_end) = match range {
+                        ScopeRange::Range { start, end } => (start, end),
+                        ScopeRange::Node { start: _ } => todo!(),
+                        ScopeRange::ErrorPath => todo!(),
+                        ScopeRange::Error => todo!(),
+                    };
+
+                    if node_start < *range_start || node_start >= *range_end {
                         hide_row = true;
                     }
-                    if node_start >= range.end {
-                        ranges.pop();
+                    if node_start >= *range_end {
+                        pop = true;
                         if !ranges.is_empty() {
                             draw_extra_lf = true;
                         }
                         if let Some(range) = ranges.last() {
-                            if node_start < range.start {
+                            let range_start = match range {
+                                ScopeRange::Range { start, .. } => start,
+                                ScopeRange::Node { start: _ } => todo!(),
+                                ScopeRange::ErrorPath => todo!(),
+                                ScopeRange::Error => todo!(),
+                            };
+
+                            if node_start < *range_start {
                                 hide_row = true;
                             }
                         }
                     }
                 }
+            }
+            if pop {
+                ranges.pop();
             }
         }
 
