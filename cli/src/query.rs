@@ -18,7 +18,7 @@ pub fn query_files_at_paths(
     query_path: &Path,
     ordered_captures: bool,
     range: Option<Range<usize>>,
-    limit_ranges: Option<&[&[&str]]>,
+    limit_ranges: &Option<Vec<Vec<&str>>>,
     should_test: bool,
 ) -> Result<()> {
     let stdout = io::stdout();
@@ -49,7 +49,7 @@ pub fn query_files_at_paths(
         if paths.len() > 1 {
             bail!("The `--limit-range` currently only supported with a one input item");
         }
-        limit_ranges
+        limit_ranges.as_ref()
             .map(|limit_ranges| ScopeRange::parse_inputs(&limit_ranges))
             .transpose()?
     };

@@ -82,7 +82,7 @@ pub fn parse_input(
     output: Option<&OutputFormat>,
     edits: Option<&[&str]>,
     apply_edits: bool,
-    limit_ranges: Option<&[&[&str]]>,
+    limit_ranges: &Option<Vec<Vec<&str>>>,
     print_time: bool,
     quiet: bool,
     debug: bool,
@@ -206,7 +206,7 @@ pub fn parse_input(
 
         let mut cst_output = false;
         if !quiet {
-            let limit_ranges = limit_ranges
+            let limit_ranges = limit_ranges.as_ref()
                 .map(|limit_ranges| ScopeRange::parse_inputs(&limit_ranges))
                 .transpose()?;
 

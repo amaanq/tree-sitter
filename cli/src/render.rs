@@ -162,7 +162,7 @@ pub enum ScopeRange {
 }
 
 impl ScopeRange {
-    pub fn parse_inputs(inputs: &[&[&str]]) -> anyhow::Result<Vec<Self>> {
+    pub fn parse_inputs(inputs: &[Vec<&str>]) -> anyhow::Result<Vec<Self>> {
         let mut ranges = inputs.iter();
         let mut limit_ranges = Vec::with_capacity(inputs.len().saturating_div(2));
         while let Some(input) = ranges.next() {

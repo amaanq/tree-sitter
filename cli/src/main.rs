@@ -456,7 +456,6 @@ fn run() -> Result<()> {
             let edits = edits.as_ref().map(Vec::as_ref);
             let apply_edits = matches.get_flag("apply-edits");
             let limit_ranges = matches.get_occurrences_str("limit-ranges");
-            let limit_ranges = limit_ranges.as_ref().map(|v| v.as_ref().map(Vec::as_ref));
             let debug = matches.get_flag("debug");
             let debug_build = matches.get_flag("debug-build");
             let debug_graph = matches.get_flag("debug-graph");
@@ -506,7 +505,7 @@ fn run() -> Result<()> {
                     output,
                     edits,
                     apply_edits,
-                    limit_ranges,
+                    &limit_ranges,
                     time,
                     quiet,
                     debug,
@@ -554,7 +553,6 @@ fn run() -> Result<()> {
                 r[0].parse().unwrap()..r[1].parse().unwrap()
             });
             let limit_ranges = matches.get_occurrences_str("limit-ranges");
-            let limit_ranges = limit_ranges.as_ref().map(|v| v.as_ref().map(Vec::as_ref));
 
             let loader_config = config.get()?;
             let mut loader = loader_with_libdir(libdir)?;
@@ -567,7 +565,7 @@ fn run() -> Result<()> {
                 query_path,
                 captures,
                 range,
-                limit_ranges,
+                &limit_ranges,
                 should_test,
             )?;
         }
