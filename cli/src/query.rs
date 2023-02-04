@@ -46,14 +46,22 @@ pub fn query_files_at_paths(
     let name_color = Color::RGB(38, 166, 154);
 
     let _limit_ranges = {
-        if paths.len() > 1 {
-            bail!("The `--limit-range` currently only supported with a one input item");
-        }
-        limit_ranges
+        let limit_ranges = limit_ranges
             .as_ref()
             .map(|limit_ranges| ScopeRange::parse_inputs(&limit_ranges))
-            .transpose()?
+            .transpose()?;
+
+        if limit_ranges.is_some() && paths.len() > 1 {
+            bail!("The `--limit-range` currently only supported with a one input item");
+        }
+
+        limit_ranges
     };
+
+    let mut show_file_names = paths.len();
+    if show_file_names == 1 {
+        show_file_names = 0;
+    }
 
     for path in paths {
         let mut results = Vec::new();
@@ -62,13 +70,15 @@ pub fn query_files_at_paths(
             fs::read(&path).with_context(|| format!("Error reading source file {:?}", path))?;
         let tree = parser.parse(&source_code, None).unwrap();
 
-        writeln!(
-            &mut stdout,
-            "{C}{}{R}",
-            path.to_string_lossy(),
-            C = name_color.prefix(),
-            R = name_color.suffix()
-        )?;
+        if show_file_names > 0 {
+            writeln!(
+                &mut stdout,
+                "{C}{}{R}",
+                path.to_string_lossy(),
+                C = name_color.prefix(),
+                R = name_color.suffix()
+            )?;
+        }
 
         let mut last_row = usize::MAX;
 
@@ -160,6 +170,12 @@ pub fn query_files_at_paths(
         }
         if should_test {
             query_testing::assert_expected_captures(results, path, &mut parser, language)?
+        }
+        if show_file_names > 1 {
+            println!()
+        }
+        if show_file_names > 0 {
+            show_file_names -= 1;
         }
     }
 
