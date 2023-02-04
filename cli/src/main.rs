@@ -80,6 +80,15 @@ fn run() -> Result<()> {
 
     let limit_ranges_arg = Arg::new("limit-ranges")
         .help("Limit output to a range")
+        .long_help(concat!(
+            "Limit output to a range (can be used multiple times).\n",
+            "The option supports multiple formats:\n",
+            "  `<start_row:start_column> <end_row:end_column>` - select a range of nodes.\n",
+            "  `<end_row:end_column>` - select a range of nodes starting from 0:0 and up to specified.\n",
+            "  `<row:column>-` - select a range of nodes starting from specied point and up to the end.\n",
+            "  `<row:column>@` - select a range of nodes that are in a range of a specifed parent node.\n",
+            "In the `<row:column>` specification the column part may be ommited."
+        ))
         .long("limit-range")
         .short('l')
         .num_args(1..=2)
