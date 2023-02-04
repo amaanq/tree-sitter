@@ -139,7 +139,7 @@ pub fn query_files_at_paths(
         } else {
             for m in query_cursor.matches(&query, tree.root_node(), source_code.as_slice()) {
                 let mut capture_pad = "";
-                let mut max_capture_name_len2 = max_capture_name_len;
+                let max_capture_name_len2 = max_capture_name_len + 1;
                 let mut pattern_index = usize::MAX;
                 for capture in m.captures {
                     let check = NodeRangeCheck::check_parent_scoped(
@@ -158,8 +158,7 @@ pub fn query_files_at_paths(
                         pattern_index = m.pattern_index;
                         c.field
                     } else {
-                        max_capture_name_len2 = max_capture_name_len + 2;
-                        capture_pad = "  ";
+                        capture_pad = " ";
                         c.pos2
                     };
                     let capture_index = capture.index;
@@ -182,11 +181,12 @@ pub fn query_files_at_paths(
                             R = c.backtick.suffix()
                         )
                     };
+                    let capture_name = format!("{capture_pad}{capture_name}");
                     #[rustfmt::skip]
                     writeln!(
                             &mut stdout,
-                            "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cp}{cn:<max_cn$} {text}",
-                            pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len2, cp=capture_pad,
+                            "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
+                            pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len2,
                             P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                         )?;
                     results.push(query_testing::CaptureInfo {
