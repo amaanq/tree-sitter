@@ -556,14 +556,14 @@ impl<W: Write> Visitor for CstRenderer<'_, W> {
     }
 }
 
-struct NodeRangeCheck {
+pub struct NodeRangeCheck {
     pub hide_row: bool,
     pub draw_extra_lf: bool,
 }
 
 impl NodeRangeCheck {
     #[inline(always)]
-    fn check(limit_ranges: &mut Option<Vec<ScopeRange>>, node: &Node) -> anyhow::Result<Self> {
+    pub fn check(limit_ranges: &mut Option<Vec<ScopeRange>>, node: &Node) -> anyhow::Result<Self> {
         // Implement a range display logic
         let mut pop = false;
         let mut hide_row = false;

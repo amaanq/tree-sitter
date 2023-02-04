@@ -1,6 +1,6 @@
 use crate::{
     query_testing,
-    render::{self, Colors, ScopeRange},
+    render::{self, Colors, NodeRangeCheck, ScopeRange},
 };
 use ansi_term::{Color, Style};
 use anyhow::{bail, Context, Result};
@@ -45,7 +45,7 @@ pub fn query_files_at_paths(
     let c = render::Colors::new();
     let name_color = Color::RGB(38, 166, 154);
 
-    let _limit_ranges = {
+    let mut limit_ranges = {
         let limit_ranges = limit_ranges
             .as_ref()
             .map(|limit_ranges| ScopeRange::parse_inputs(&limit_ranges))
@@ -88,6 +88,15 @@ pub fn query_files_at_paths(
             {
                 let pattern_index = m.pattern_index;
                 let capture = m.captures[capture_index];
+
+                let check = NodeRangeCheck::check(&mut limit_ranges, &capture.node)?;
+                if check.draw_extra_lf {
+                    println!();
+                }
+                if check.hide_row {
+                    continue;
+                }
+
                 let capture_index = capture.index;
                 let capture_name = &query.capture_names()[capture_index as usize];
                 let (pos, pos_c, ml) = format_pos(&capture, &mut last_row, &c);
@@ -123,6 +132,14 @@ pub fn query_files_at_paths(
             for m in query_cursor.matches(&query, tree.root_node(), source_code.as_slice()) {
                 let mut pattern_index = usize::MAX;
                 for capture in m.captures {
+                    let check = NodeRangeCheck::check(&mut limit_ranges, &capture.node)?;
+                    if check.draw_extra_lf {
+                        println!();
+                    }
+                    if check.hide_row {
+                        continue;
+                    }
+
                     let pat_c = if pattern_index == usize::MAX {
                         pattern_index = m.pattern_index;
                         c.field
