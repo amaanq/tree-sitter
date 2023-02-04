@@ -17,7 +17,7 @@
 
 // It defined in <features.h> by _GNU_SOURCE -> _DEFAULT_SOURCE -> __USE_MISC
 // but we don't need all other things for this simple case.
-#	define __USE_MISC
+#	define __USE_MISC 1
 
 #	include <endian.h>
 
