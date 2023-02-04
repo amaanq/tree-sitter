@@ -28,7 +28,7 @@ pub fn query_files_at_paths(
         .with_context(|| format!("Error reading query file {:?}", query_path))?;
     let query = Query::new(language, &query_source).with_context(|| "Query compilation failed")?;
 
-    let max_capture_len =
+    let max_capture_name_len =
         query
             .capture_names()
             .iter()
@@ -123,9 +123,11 @@ pub fn query_files_at_paths(
                         R = c.backtick.suffix()
                     )
                 };
+                #[rustfmt::skip]
                 writeln!(
                     &mut stdout,
-                    "{P}{pos:<18} {PI}{pattern_index:>3}{CL}:{CI}{capture_index:<3} {CN}{capture_name:<max_capture_len$} {text}",
+                    "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
+                    pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len,
                     P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                 )?;
                 results.push(query_testing::CaptureInfo {
@@ -136,6 +138,8 @@ pub fn query_files_at_paths(
             }
         } else {
             for m in query_cursor.matches(&query, tree.root_node(), source_code.as_slice()) {
+                let mut capture_pad = "";
+                let mut max_capture_name_len2 = max_capture_name_len;
                 let mut pattern_index = usize::MAX;
                 for capture in m.captures {
                     let check = NodeRangeCheck::check_parent_scoped(
@@ -154,6 +158,8 @@ pub fn query_files_at_paths(
                         pattern_index = m.pattern_index;
                         c.field
                     } else {
+                        max_capture_name_len2 = max_capture_name_len + 2;
+                        capture_pad = "  ";
                         c.pos2
                     };
                     let capture_index = capture.index;
@@ -176,9 +182,11 @@ pub fn query_files_at_paths(
                             R = c.backtick.suffix()
                         )
                     };
+                    #[rustfmt::skip]
                     writeln!(
                             &mut stdout,
-                            "{P}{pos:<18} {PI}{pattern_index:>3}{CL}:{CI}{capture_index:<3} {CN}{capture_name:<max_capture_len$} {text}",
+                            "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cp}{cn:<max_cn$} {text}",
+                            pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len2, cp=capture_pad,
                             P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                         )?;
                     results.push(query_testing::CaptureInfo {
