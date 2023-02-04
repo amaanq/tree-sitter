@@ -536,11 +536,17 @@ impl<W: Write> Visitor for CstRenderer<'_, W> {
 
     #[inline(always)]
     fn on_visit(&mut self, context: &mut Context) -> Result {
-        if context.node().is_named() || self.show_all() {
+        let node = context.node();
+        if node.is_named() || self.show_all() {
             if !context.traversed() {
-                if self.skip_node(context)? {
+                let check = NodeRangeCheck::check(&mut self.limit_ranges, &node)?;
+                if check.draw_extra_lf {
+                    self.lf()?;
+                }
+                if check.hide_row {
                     return Ok(());
                 }
+
                 self.indent(&context)?;
                 self.node(&context)?;
                 self.lf()?;
@@ -550,28 +556,30 @@ impl<W: Write> Visitor for CstRenderer<'_, W> {
     }
 }
 
-const NODE_PAD: &str = " ";
-const MULTILINE_PAD: &str = " ";
+struct NodeRangeCheck {
+    pub hide_row: bool,
+    pub draw_extra_lf: bool,
+}
 
-impl<'a, W: Write> CstRenderer<'a, W> {
+impl NodeRangeCheck {
     #[inline(always)]
-    fn skip_node(&mut self, context: &Context) -> anyhow::Result<bool> {
+    fn check(limit_ranges: &mut Option<Vec<ScopeRange>>, node: &Node) -> anyhow::Result<Self> {
         // Implement a range display logic
         let mut pop = false;
         let mut hide_row = false;
         let mut draw_extra_lf = false;
-        if let Some(ranges) = &mut self.limit_ranges {
+        if let Some(ranges) = limit_ranges {
             if ranges.is_empty() {
                 hide_row = true;
             } else {
-                let node_start = context.node().start_position();
+                let node_start = node.start_position();
                 // dbg!(&ranges, &tail_one);
                 if let Some((last, ranges)) = ranges.split_last_mut() {
                     if let ScopeRange::Node { start } = last {
                         if node_start >= *start {
                             *last = ScopeRange::Range {
                                 start: *start,
-                                end: context.node().end_position(),
+                                end: node.end_position(),
                             };
                         }
                     };
@@ -611,17 +619,17 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             }
         }
 
-        if draw_extra_lf {
-            self.lf()?;
-        }
-
-        if hide_row {
-            return Ok(true);
-        }
-
-        Ok(false)
+        Ok(Self {
+            hide_row,
+            draw_extra_lf,
+        })
     }
+}
 
+const NODE_PAD: &str = " ";
+const MULTILINE_PAD: &str = " ";
+
+impl<'a, W: Write> CstRenderer<'a, W> {
     #[inline(always)]
     fn indent(&mut self, context: &Context) -> Result {
         self.indent_base = self.indent_shift + self.indent_level * 2;
