@@ -80,6 +80,8 @@ pub fn query_files_at_paths(
             )?;
         }
 
+        let mut tree_cursor = tree.walk();
+
         let mut last_row = usize::MAX;
 
         if ordered_captures {
@@ -89,7 +91,11 @@ pub fn query_files_at_paths(
                 let pattern_index = m.pattern_index;
                 let capture = m.captures[capture_index];
 
-                let check = NodeRangeCheck::check(&mut limit_ranges, &capture.node)?;
+                let check = NodeRangeCheck::check_parent_scoped(
+                    &mut tree_cursor,
+                    &mut limit_ranges,
+                    &capture.node,
+                )?;
                 if check.draw_extra_lf {
                     println!();
                 }
@@ -132,7 +138,11 @@ pub fn query_files_at_paths(
             for m in query_cursor.matches(&query, tree.root_node(), source_code.as_slice()) {
                 let mut pattern_index = usize::MAX;
                 for capture in m.captures {
-                    let check = NodeRangeCheck::check(&mut limit_ranges, &capture.node)?;
+                    let check = NodeRangeCheck::check_parent_scoped(
+                        &mut tree_cursor,
+                        &mut limit_ranges,
+                        &capture.node,
+                    )?;
                     if check.draw_extra_lf {
                         println!();
                     }

@@ -624,6 +624,27 @@ impl NodeRangeCheck {
             draw_extra_lf,
         })
     }
+
+    pub fn check_parent_scoped(
+        tree_cursor: &mut TreeCursor,
+        limit_ranges: &mut Option<Vec<ScopeRange>>,
+        node: &Node,
+    ) -> anyhow::Result<Self> {
+        if let Some(ranges) = limit_ranges {
+            if let Some((last, _)) = ranges.split_last_mut() {
+                if let ScopeRange::Node { start } = last {
+                    if let Some(_) = tree_cursor.goto_first_child_for_point(*start) {
+                        let node = tree_cursor.node();
+                        *last = ScopeRange::Range {
+                            start: node.end_position(),
+                            end: node.end_position(),
+                        };
+                    }
+                };
+            }
+        }
+        Self::check(limit_ranges, node)
+    }
 }
 
 const NODE_PAD: &str = " ";
