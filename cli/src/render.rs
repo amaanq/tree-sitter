@@ -630,13 +630,42 @@ impl NodeRangeCheck {
         limit_ranges: &mut Option<Vec<ScopeRange>>,
         node: &Node,
     ) -> anyhow::Result<Self> {
+        fn goto_node_for_point<'a>(cursor: &'a mut TreeCursor, point: &Point) -> Option<Node<'a>> {
+            loop {
+                if cursor.node().start_position() < *point {
+                    break;
+                }
+                if !cursor.goto_parent() {
+                    return None; // exit if cursor is scoped to a node and can't go further
+                };
+            }
+            let node = loop {
+                let node = cursor.node();
+                if *point > node.start_position() {
+                    if let Some(sibling) = node.next_sibling() {
+                        if *point < sibling.start_position() {
+                            if !cursor.goto_first_child() {
+                                break sibling;
+                            }
+                        } else {
+                            cursor.goto_next_sibling();
+                        }
+                    } else if !cursor.goto_first_child() {
+                        break node;
+                    }
+                } else {
+                    break node;
+                }
+            };
+            Some(node)
+        }
+
         if let Some(ranges) = limit_ranges {
             if let Some((last, _)) = ranges.split_last_mut() {
                 if let ScopeRange::Node { start } = last {
-                    if let Some(_) = tree_cursor.goto_first_child_for_point(*start) {
-                        let node = tree_cursor.node();
+                    if let Some(node) = goto_node_for_point(tree_cursor, start) {
                         *last = ScopeRange::Range {
-                            start: node.end_position(),
+                            start: node.start_position(),
                             end: node.end_position(),
                         };
                     }
