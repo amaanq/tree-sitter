@@ -415,6 +415,8 @@ pub struct CstRenderer<'a, W: Write> {
     indent_level: usize,
     indent_shift: usize,
     last_line_no: usize,
+    bytes_align: usize,
+    pos_align: usize,
     original_nodes: &'a Option<HashSet<usize>>,
     changed_ranges: &'a Option<Vec<Range>>,
     limit_ranges: Option<Vec<ScopeRange>>,
@@ -433,6 +435,8 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             indent_base: 0,
             indent_level: 0,
             indent_shift: 0,
+            bytes_align: 0,
+            pos_align: 0,
             last_line_no: usize::MAX,
             original_nodes: &None,
             changed_ranges: &None,
@@ -460,6 +464,12 @@ impl<'a, W: Write> CstRenderer<'a, W> {
 
     pub fn limit_ranges(mut self, ranges: &'a Option<Vec<ScopeRange>>) -> Self {
         self.limit_ranges = ranges.clone();
+        self
+    }
+
+    pub fn source_counts(mut self, bytes_count: usize, lines_count: usize) -> Self {
+        self.bytes_align = format!("{bytes_count}:{bytes_count}").len() + 1;
+        self.pos_align = format!("{lines_count}:xxx - {lines_count}:xxx").len();
         self
     }
 }

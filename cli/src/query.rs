@@ -9,6 +9,7 @@ use std::{
     io::{self, Write},
     ops::Range,
     path::{Path, PathBuf},
+    thread,
     time::Instant,
 };
 use tree_sitter::{Language, Parser, Point, Query, QueryCapture, QueryCursor};
@@ -71,7 +72,25 @@ pub fn query_files_at_paths(
 
         let source_code =
             fs::read(&path).with_context(|| format!("Error reading source file {:?}", path))?;
-        let tree = parser.parse(&source_code, None).unwrap();
+        let source_code = source_code.as_slice();
+
+        let scope = thread::scope(|s| {
+            let counts = s.spawn(|| {
+                let mut lines = 0;
+                for c in source_code.iter() {
+                    if *c as char == '\n' {
+                        lines += 1;
+                    }
+                }
+                lines
+            });
+            (
+                parser.parse(&source_code, None).unwrap(),
+                counts.join().expect("Can't start a thread"),
+            )
+        });
+        let (tree, lines_count) = scope;
+        let pos_align = format!("{lines_count}:xxx - {lines_count}:xxx").len();
 
         if show_file_names > 0 {
             writeln!(
@@ -89,9 +108,7 @@ pub fn query_files_at_paths(
 
         let start = Instant::now();
         if ordered_captures {
-            for (m, capture_index) in
-                query_cursor.captures(&query, tree.root_node(), source_code.as_slice())
-            {
+            for (m, capture_index) in query_cursor.captures(&query, tree.root_node(), source_code) {
                 let pattern_index = m.pattern_index;
                 let capture = m.captures[capture_index];
 
@@ -131,7 +148,7 @@ pub fn query_files_at_paths(
                     #[rustfmt::skip]
                     writeln!(
                         &mut stdout,
-                        "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
+                        "{P}{pos:<pos_align$} {PI}{pi:>2}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
                         pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len,
                         P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                     )?;
@@ -143,7 +160,7 @@ pub fn query_files_at_paths(
                 });
             }
         } else {
-            for m in query_cursor.matches(&query, tree.root_node(), source_code.as_slice()) {
+            for m in query_cursor.matches(&query, tree.root_node(), source_code) {
                 let mut capture_pad = "";
                 let max_capture_name_len2 = max_capture_name_len + 1;
                 let mut pattern_index = usize::MAX;
@@ -192,7 +209,7 @@ pub fn query_files_at_paths(
                         #[rustfmt::skip]
                         writeln!(
                                 &mut stdout,
-                                "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
+                                "{P}{pos:<pos_align$} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
                                 pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len2,
                                 P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                             )?;
