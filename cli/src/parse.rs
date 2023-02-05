@@ -122,13 +122,10 @@ pub fn parse_input(
 
     let scope = thread::scope(|s| {
         let counts = s.spawn(|| {
-            let mut lines = 0;
-            for c in input.source_code.iter() {
-                if *c as char == '\n' {
-                    lines += 1;
-                }
-            }
-            (input.source_code.len(), lines)
+            (
+                input.source_code.len(),
+                bytecount::count(&input.source_code, b'\n'),
+            )
         });
         let tree = match encoding {
             Encoding::UTF8 => parser.parse(&input.source_code, None),

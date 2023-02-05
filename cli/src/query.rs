@@ -75,15 +75,7 @@ pub fn query_files_at_paths(
         let source_code = source_code.as_slice();
 
         let scope = thread::scope(|s| {
-            let counts = s.spawn(|| {
-                let mut lines = 0;
-                for c in source_code.iter() {
-                    if *c as char == '\n' {
-                        lines += 1;
-                    }
-                }
-                lines
-            });
+            let counts = s.spawn(|| bytecount::count(source_code, b'\n'));
             (
                 parser.parse(&source_code, None).unwrap(),
                 counts.join().expect("Can't start a thread"),
