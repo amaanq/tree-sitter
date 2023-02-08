@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Error, Result};
+use cc::Build;
 use libloading::{Library, Symbol};
 use once_cell::unsync::OnceCell;
 use regex::{Regex, RegexBuilder};
@@ -380,13 +381,120 @@ impl Loader {
         lib_name.push('.');
         lib_name.push_str(DYLIB_EXTENSION);
 
-        let library_path = self.parser_lib_path.join(lib_name);
+        let library_path = self.parser_lib_path.join(&lib_name);
 
         let recompile = needs_recompile(&library_path, &parser_path, &scanner_path)
             .with_context(|| "Failed to compare source and binary timestamps")?;
 
-        if recompile {
-            fs::create_dir_all(&self.parser_lib_path)?;
+        struct Compiler {
+            cc: Build,
+            cpp: bool,
+        }
+
+        impl Compiler {
+            fn new(debug_build: bool) -> Self {
+                let mut cc = cc::Build::new();
+
+                cc.cargo_metadata(false)
+                    .target(BUILD_TARGET)
+                    .host(BUILD_TARGET);
+
+                cc.opt_level(if debug_build { 0 } else { 2 });
+
+                Self { cc, cpp: false }
+            }
+
+            fn compile(&mut self, source: &Path, header_path: &Path) -> Result<PathBuf> {
+                let ext = source.extension();
+                let ext = ext.unwrap().to_str().unwrap();
+
+                let dest_object = source.with_extension("o");
+                let dest = dest_object.to_str().unwrap();
+
+                let source = source.to_str().unwrap();
+
+                let mut cc = self.cc.clone();
+
+                cc.include(header_path);
+
+                // For conditional compilation of external scanner code when
+                // used internally by `tree-siteer parse` and other sub commands.
+                cc.define("TREE_SITTER_INTERNAL_BUILD", "1");
+
+                match ext {
+                    "c" => (),
+                    "cc" => {
+                        cc.flag("-std=c++11");
+                        self.cpp = true;
+                    }
+                    _ => panic!("Unsupported input type: {source:?}"),
+                }
+
+                cc.flag("-o");
+                cc.flag(dest);
+
+                cc.flag("-c");
+                cc.flag(source);
+
+                Self::exec(cc)?;
+
+                Ok(dest_object)
+            }
+
+            fn link_library<'a>(
+                &self,
+                library_path: &Path,
+                object_files: impl Iterator<Item = &'a Path>,
+            ) -> Result<()> {
+                let mut cc = self.cc.clone();
+
+                let library_path = library_path.to_str().unwrap();
+
+                if self.cpp {
+                    // cc.flag("-std=c++11");
+                    cc.flag("-lstdc++");
+                }
+
+                cc.shared_flag(true);
+
+                cc.flag("-o");
+                cc.flag(library_path);
+                for obj in object_files {
+                    cc.flag(obj.to_str().unwrap());
+                }
+
+                Self::exec(cc)?;
+
+                Ok(())
+            }
+
+            fn exec(cc: Build) -> Result<()> {
+                let compiler = cc.get_compiler();
+                let mut command = compiler.to_command();
+
+                println!("{command:?}");
+
+                let output = command
+                    .output()
+                    .with_context(|| "Failed to execute compiler")?;
+                if !output.status.success() {
+                    return Err(anyhow!(
+                        "Parser compilation failed.\nCommand: {command:?}\nStdout: {}\nStderr: {}",
+                        String::from_utf8_lossy(&output.stdout),
+                        String::from_utf8_lossy(&output.stderr)
+                    ));
+                }
+                Ok(())
+            }
+        }
+
+        fn _old_compiling_logic(
+            header_path: &Path,
+            parser_path: &Path,
+            scanner_path: &Option<PathBuf>,
+            library_path: &Path,
+            debug_build: bool,
+        ) -> Result<()> {
             let mut config = cc::Build::new();
             config
                 .cpp(true)
@@ -402,7 +510,7 @@ impl Loader {
 
             if cfg!(windows) {
                 command.args(&["/nologo", "/LD", "/I"]).arg(header_path);
-                if self.debug_build {
+                if debug_build {
                     command.arg("/Od");
                 } else {
                     command.arg("/O2");
@@ -425,7 +533,7 @@ impl Loader {
                     .arg("-o")
                     .arg(&library_path);
 
-                if self.debug_build {
+                if debug_build {
                     command.arg("-O0");
                 } else {
                     command.arg("-O2");
@@ -455,6 +563,28 @@ impl Loader {
                     String::from_utf8_lossy(&output.stderr)
                 ));
             }
+            Ok(())
+        }
+
+        if recompile {
+            fs::create_dir_all(&self.parser_lib_path)?;
+
+            let mut compiler = Compiler::new(self.debug_build);
+            let parser_o = Some(compiler.compile(parser_path, header_path)?);
+            let scanner_o = scanner_path
+                .as_ref()
+                .map(|p| compiler.compile(p.as_path(), header_path))
+                .transpose()?;
+            let object_files = parser_o.iter().chain(scanner_o.iter()).map(|p| p.as_path());
+            compiler.link_library(&library_path, object_files)?;
+
+            // _old_compiling_logic(
+            //     header_path,
+            //     parser_path,
+            //     scanner_path,
+            //     library_path.as_path(),
+            //     self.debug_build,
+            // )?;
         }
 
         let library = unsafe { Library::new(&library_path) }
