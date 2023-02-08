@@ -415,6 +415,17 @@ impl Loader {
                 }
             }
 
+            fn on_clang(&self, cc: &mut Build) {
+                if self.cpp {
+                    // cc.flag("-std=c++11");
+                    if cc.get_compiler().is_like_clang() {
+                        cc.flag("-lc++");
+                    } else {
+                        cc.flag("-lstdc++");
+                    }
+                }
+            }
+
             fn compile(&mut self, source: &Path, header_path: &Path) -> Result<PathBuf> {
                 let ext = source.extension();
                 let ext = ext.unwrap().to_str().unwrap();
@@ -437,6 +448,7 @@ impl Loader {
                     "cc" => {
                         cc.flag("-std=c++11");
                         self.cpp = true;
+                        self.on_clang(&mut cc);
                     }
                     _ => panic!("Unsupported input type: {source:?}"),
                 }
@@ -461,14 +473,7 @@ impl Loader {
 
                 let library_path = library_path.to_str().unwrap();
 
-                if self.cpp {
-                    // cc.flag("-std=c++11");
-                    if cc.get_compiler().is_like_clang() {
-                        cc.flag("-lc++");
-                    } else {
-                        cc.flag("-lstdc++");
-                    }
-                }
+                self.on_clang(&mut cc);
 
                 cc.shared_flag(true);
 
