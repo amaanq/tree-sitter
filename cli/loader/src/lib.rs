@@ -402,6 +402,12 @@ impl Loader {
 
                 cc.opt_level(if debug_build { 0 } else { 2 });
 
+                if debug_build {
+                    cc.flag("-g");
+                }
+
+                cc.flag("-fno-exceptions");
+
                 Self {
                     cc,
                     verbose,
@@ -457,7 +463,11 @@ impl Loader {
 
                 if self.cpp {
                     // cc.flag("-std=c++11");
-                    cc.flag("-lstdc++");
+                    if cc.get_compiler().is_like_clang() {
+                        cc.flag("-lc++");
+                    } else {
+                        cc.flag("-lstdc++");
+                    }
                 }
 
                 cc.shared_flag(true);
