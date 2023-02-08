@@ -5,6 +5,7 @@ use crate::{
 use ansi_term::{Color, Style};
 use anyhow::{bail, Context, Result};
 use std::{
+    collections::HashSet,
     fs,
     io::{self, Write},
     ops::Range,
@@ -152,10 +153,22 @@ pub fn query_files_at_paths(
                 });
             }
         } else {
+            let mut hidden_matches = HashSet::new();
+
             for m in query_cursor.matches(&query, tree.root_node(), source_code) {
                 let mut capture_pad = "";
                 let max_capture_name_len2 = max_capture_name_len + 1;
                 let mut pattern_index = usize::MAX;
+                if m.captures.len() == 0 {
+                    if !hidden_matches.contains(&m.id()) {
+                        hidden_matches.insert(m.id());
+                        writeln!(&mut stdout, "Hidden match with id: {}", m.id())?;
+                        writeln!(
+                            &mut stdout,
+                            "You need to specify al least one capture to have an output for it"
+                        )?;
+                    }
+                }
                 for capture in m.captures {
                     let check = NodeRangeCheck::check_parent_scoped(
                         &mut tree_cursor,
