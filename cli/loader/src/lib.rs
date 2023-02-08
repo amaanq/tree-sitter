@@ -389,10 +389,11 @@ impl Loader {
         struct Compiler {
             cc: Build,
             cpp: bool,
+            verbose: bool,
         }
 
         impl Compiler {
-            fn new(debug_build: bool) -> Self {
+            fn new(debug_build: bool, verbose: bool) -> Self {
                 let mut cc = cc::Build::new();
 
                 cc.cargo_metadata(false)
@@ -401,7 +402,11 @@ impl Loader {
 
                 cc.opt_level(if debug_build { 0 } else { 2 });
 
-                Self { cc, cpp: false }
+                Self {
+                    cc,
+                    verbose,
+                    cpp: false,
+                }
             }
 
             fn compile(&mut self, source: &Path, header_path: &Path) -> Result<PathBuf> {
@@ -436,7 +441,7 @@ impl Loader {
                 cc.flag("-c");
                 cc.flag(source);
 
-                Self::exec(cc)?;
+                self.exec(cc)?;
 
                 Ok(dest_object)
             }
@@ -463,16 +468,22 @@ impl Loader {
                     cc.flag(obj.to_str().unwrap());
                 }
 
-                Self::exec(cc)?;
+                self.exec(cc)?;
 
                 Ok(())
             }
 
-            fn exec(cc: Build) -> Result<()> {
+            fn exec(&self, cc: Build) -> Result<()> {
                 let compiler = cc.get_compiler();
                 let mut command = compiler.to_command();
 
-                println!("{command:?}");
+                if self.verbose {
+                    let args = command.get_args().map(|a| a.to_str().unwrap());
+                    let cmd = command.get_program().to_str().unwrap();
+                    let cmd = Some(cmd).into_iter().chain(args);
+
+                    eprintln!("{}", shell_words::join(cmd));
+                }
 
                 let output = command
                     .output()
@@ -569,7 +580,9 @@ impl Loader {
         if recompile {
             fs::create_dir_all(&self.parser_lib_path)?;
 
-            let mut compiler = Compiler::new(self.debug_build);
+            let verbose = env::var("TREE_SITTER_VERBOSE").ok().is_some();
+
+            let mut compiler = Compiler::new(self.debug_build, verbose);
             let parser_o = Some(compiler.compile(parser_path, header_path)?);
             let scanner_o = scanner_path
                 .as_ref()
