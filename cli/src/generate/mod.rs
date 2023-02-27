@@ -45,7 +45,7 @@ pub fn generate_parser_in_directory(
     generate_bindings: bool,
     report_symbol_name: Option<&str>,
 ) -> Result<()> {
-    if let Err(e) = generate_skel_in_empty_dir(repo_path.as_path()) {
+    if let Err(e) = generate_skel_in_empty_dir(repo_path.as_path(), grammar_path.is_none()) {
         eprintln!("Warning: Can't fill a current dir with a default grammar files structure.\n{e}");
     }
 
@@ -100,7 +100,7 @@ pub fn generate_parser_in_directory(
     Ok(())
 }
 
-fn generate_skel_in_empty_dir(repo_path: &Path) -> Result<()> {
+fn generate_skel_in_empty_dir(repo_path: &Path, no_custom_grammar_path: bool) -> Result<()> {
     if repo_path
         .read_dir()
         .with_context(|| "Can't list a current dir content to check that it's empty")?
@@ -108,32 +108,36 @@ fn generate_skel_in_empty_dir(repo_path: &Path) -> Result<()> {
         .count()
         == 0
     {
-        let grammar_name = repo_path
-            .canonicalize()
-            .with_context(|| "Can't construct a grammar name from a current dir name")?;
-        let grammar_name = grammar_name
-            .file_name()
-            .map(|s| s.to_str())
-            .flatten()
-            .map(|s| s.strip_prefix("tree-sitter-"))
-            .flatten()
-            .unwrap_or("YOUR_LANGUAGE_NAME");
-        let grammar_template = indoc::formatdoc! {"
-            module.exports = grammar({{
-                name: '{grammar_name}',
+        if no_custom_grammar_path {
+            let grammar_name = repo_path
+                .canonicalize()
+                .with_context(|| "Can't construct a grammar name from a current dir name")?;
+            let grammar_name = grammar_name
+                .file_name()
+                .map(|s| s.to_str())
+                .flatten()
+                .map(|s| s.strip_prefix("tree-sitter-"))
+                .flatten()
+                .unwrap_or("YOUR_LANGUAGE_NAME");
+            let grammar_template = indoc::formatdoc! {"
+                module.exports = grammar({{
+                    name: '{grammar_name}',
 
-                rules: {{
-                // TODO: add the actual grammar rules
-                source_file: $ => 'hello'
-                }}
-            }});
-        "};
-        let grammar_js_path = repo_path.join("grammar.js");
-        fs::write(grammar_js_path, grammar_template).with_context(|| {
-            "Can't write a grammar template to a grammar.js file in a currect dir"
-        })?;
+                    rules: {{
+                    // TODO: add the actual grammar rules
+                    source_file: $ => 'hello'
+                    }}
+                }});
+            "};
+            let grammar_js_path = repo_path.join("grammar.js");
+            fs::write(grammar_js_path, grammar_template).with_context(|| {
+                "Can't write a grammar template to a grammar.js file in a currect dir"
+            })?;
+        }
 
         let gitingore_template = indoc::indoc! {"
+            package-lock.json
+            Cargo.lock
             Cargo.toml
             binding.gyp
             /bindings
