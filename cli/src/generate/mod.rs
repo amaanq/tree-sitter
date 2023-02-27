@@ -45,6 +45,14 @@ pub fn generate_parser_in_directory(
     generate_bindings: bool,
     report_symbol_name: Option<&str>,
 ) -> Result<()> {
+    let grammar_js_path = grammar_path.map_or(repo_path.join("grammar.js"), |s| s.into());
+
+    if let Err(e) =
+        generate_grammar_skel_in_empty_dir(repo_path.as_path(), grammar_js_path.as_path())
+    {
+        eprintln!("Warning: Can't fill a current dir with a default grammar files structure.\n{e}");
+    }
+
     let src_path = repo_path.join("src");
     let header_path = src_path.join("tree_sitter");
 
@@ -59,7 +67,6 @@ pub fn generate_parser_in_directory(
             grammar_json = load_grammar_file(path.as_ref())?;
         }
         None => {
-            let grammar_js_path = grammar_path.map_or(repo_path.join("grammar.js"), |s| s.into());
             grammar_json = load_grammar_file(&grammar_js_path)?;
             fs::write(&src_path.join("grammar.json"), &grammar_json)?;
         }
@@ -93,6 +100,41 @@ pub fn generate_parser_in_directory(
         binding_files::generate_binding_files(&repo_path, &language_name)?;
     }
 
+    Ok(())
+}
+
+fn generate_grammar_skel_in_empty_dir(repo_path: &Path, grammar_js_path: &Path) -> Result<()> {
+    if repo_path
+        .read_dir()
+        .with_context(|| "Can't list a current dir content to check that it's empty")?
+        .into_iter()
+        .count()
+        == 0
+    {
+        let grammar_name = repo_path
+            .canonicalize()
+            .with_context(|| "Can't construct a grammar name from a current dir name")?;
+        let grammar_name = grammar_name
+            .file_name()
+            .map(|s| s.to_str())
+            .flatten()
+            .map(|s| s.strip_prefix("tree-sitter-"))
+            .flatten()
+            .unwrap_or("YOUR_LANGUAGE_NAME");
+        let grammar_template = indoc::formatdoc! {"
+            module.exports = grammar({{
+                name: '{grammar_name}',
+
+                rules: {{
+                // TODO: add the actual grammar rules
+                source_file: $ => 'hello'
+                }}
+            }});
+        "};
+        fs::write(&grammar_js_path, grammar_template).with_context(|| {
+            "Can't write a grammar template to a grammar.js file in a currect dir"
+        })?;
+    }
     Ok(())
 }
 

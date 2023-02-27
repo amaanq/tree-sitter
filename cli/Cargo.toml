@@ -47,6 +47,7 @@ tiny_http = "0.12"
 walkdir = "2.3"
 webbrowser = "0.8"
 which = "4.4"
+indoc = "2"
 
 [dev-dependencies]
 rand = "0.8"
