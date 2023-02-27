@@ -132,6 +132,19 @@ fn generate_skel_in_empty_dir(repo_path: &Path) -> Result<()> {
         fs::write(grammar_js_path, grammar_template).with_context(|| {
             "Can't write a grammar template to a grammar.js file in a currect dir"
         })?;
+
+        let gitingore_template = indoc::indoc! {"
+            Cargo.toml
+            binding.gyp
+            /bindings
+            /src/tree_sitter
+            /src/node-types.json
+            /src/grammar.json
+            /src/parser.c
+        "};
+        let gitignore_path = repo_path.join(".gitignore");
+        fs::write(gitignore_path, gitingore_template)
+            .with_context(|| "Can't write a .gitignore template file into a currect dir")?;
     }
     Ok(())
 }
