@@ -214,8 +214,14 @@ fn generate_parser_for_grammar_with_opts(
 
 pub fn load_grammar_file(grammar_path: &Path) -> Result<String> {
     match grammar_path.extension().and_then(|e| e.to_str()) {
-        Some("js") => Ok(load_js_grammar_file(grammar_path)?),
-        Some("json") => Ok(fs::read_to_string(grammar_path)?),
+        Some("js") => {
+            Ok(load_js_grammar_file(grammar_path)
+                .with_context(|| "Can't load a grammar.js file")?)
+        }
+        Some("json") => {
+            Ok(fs::read_to_string(grammar_path)
+                .with_context(|| "Can't load a grammar.json file")?)
+        }
         _ => Err(anyhow!(
             "Unknown grammar file extension: {:?}",
             grammar_path
