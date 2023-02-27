@@ -45,11 +45,7 @@ pub fn generate_parser_in_directory(
     generate_bindings: bool,
     report_symbol_name: Option<&str>,
 ) -> Result<()> {
-    let grammar_js_path = grammar_path.map_or(repo_path.join("grammar.js"), |s| s.into());
-
-    if let Err(e) =
-        generate_grammar_skel_in_empty_dir(repo_path.as_path(), grammar_js_path.as_path())
-    {
+    if let Err(e) = generate_skel_in_empty_dir(repo_path.as_path()) {
         eprintln!("Warning: Can't fill a current dir with a default grammar files structure.\n{e}");
     }
 
@@ -67,6 +63,7 @@ pub fn generate_parser_in_directory(
             grammar_json = load_grammar_file(path.as_ref())?;
         }
         None => {
+            let grammar_js_path = grammar_path.map_or(repo_path.join("grammar.js"), |s| s.into());
             grammar_json = load_grammar_file(&grammar_js_path)?;
             fs::write(&src_path.join("grammar.json"), &grammar_json)?;
         }
@@ -103,7 +100,7 @@ pub fn generate_parser_in_directory(
     Ok(())
 }
 
-fn generate_grammar_skel_in_empty_dir(repo_path: &Path, grammar_js_path: &Path) -> Result<()> {
+fn generate_skel_in_empty_dir(repo_path: &Path) -> Result<()> {
     if repo_path
         .read_dir()
         .with_context(|| "Can't list a current dir content to check that it's empty")?
@@ -131,7 +128,8 @@ fn generate_grammar_skel_in_empty_dir(repo_path: &Path, grammar_js_path: &Path) 
                 }}
             }});
         "};
-        fs::write(&grammar_js_path, grammar_template).with_context(|| {
+        let grammar_js_path = repo_path.join("grammar.js");
+        fs::write(grammar_js_path, grammar_template).with_context(|| {
             "Can't write a grammar template to a grammar.js file in a currect dir"
         })?;
     }
