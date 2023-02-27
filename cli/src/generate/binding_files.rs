@@ -1,6 +1,6 @@
 use super::write_file;
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::{fs, str};
 
 const BINDING_CC_TEMPLATE: &'static str = include_str!("./templates/binding.cc");
@@ -26,15 +26,15 @@ pub fn generate_binding_files(repo_path: &Path, language_name: &str) -> Result<(
     let rust_binding_dir = bindings_dir.join("rust");
     create_path(&rust_binding_dir, |path| create_dir(path))?;
 
-    create_path(&rust_binding_dir.join("lib.rs").to_owned(), |path| {
+    create_path(&rust_binding_dir.join("lib.rs"), |path| {
         generate_file(path, LIB_RS_TEMPLATE, language_name)
     })?;
 
-    create_path(&rust_binding_dir.join("build.rs").to_owned(), |path| {
+    create_path(&rust_binding_dir.join("build.rs"), |path| {
         generate_file(path, BUILD_RS_TEMPLATE, language_name)
     })?;
 
-    create_path(&repo_path.join("Cargo.toml").to_owned(), |path| {
+    create_path(&repo_path.join("Cargo.toml"), |path| {
         generate_file(path, CARGO_TOML_TEMPLATE, dashed_language_name)
     })?;
 
@@ -42,11 +42,11 @@ pub fn generate_binding_files(repo_path: &Path, language_name: &str) -> Result<(
     let node_binding_dir = bindings_dir.join("node");
     create_path(&node_binding_dir, |path| create_dir(path))?;
 
-    create_path(&node_binding_dir.join("index.js").to_owned(), |path| {
+    create_path(&node_binding_dir.join("index.js"), |path| {
         generate_file(path, INDEX_JS_TEMPLATE, language_name)
     })?;
 
-    create_path(&node_binding_dir.join("binding.cc").to_owned(), |path| {
+    create_path(&node_binding_dir.join("binding.cc"), |path| {
         generate_file(path, BINDING_CC_TEMPLATE, language_name)
     })?;
 
@@ -128,9 +128,9 @@ fn create_dir(path: &Path) -> Result<()> {
         .with_context(|| format!("Failed to create {:?}", path.to_string_lossy()))
 }
 
-fn create_path<F>(path: &PathBuf, action: F) -> Result<bool>
+fn create_path<F>(path: &Path, action: F) -> Result<bool>
 where
-    F: Fn(&PathBuf) -> Result<()>,
+    F: Fn(&Path) -> Result<()>,
 {
     if !path.exists() {
         action(path)?;
@@ -139,10 +139,10 @@ where
     Ok(false)
 }
 
-fn create_path_else<T, F>(path: &PathBuf, action: T, else_action: F) -> Result<bool>
+fn create_path_else<T, F>(path: &Path, action: T, else_action: F) -> Result<bool>
 where
-    T: Fn(&PathBuf) -> Result<()>,
-    F: Fn(&PathBuf) -> Result<()>,
+    T: Fn(&Path) -> Result<()>,
+    F: Fn(&Path) -> Result<()>,
 {
     if !path.exists() {
         action(path)?;
