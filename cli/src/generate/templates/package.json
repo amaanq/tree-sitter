@@ -5,10 +5,17 @@
   "main": "bindings/node",
   "keywords": [
     "parsing",
-    "incremental"
+    "incremental",
+    "PARSER_NAME"
+  ],
+  "tree-sitter": [
+    {
+      "scope": "source.PARSER_NAME",
+      "file-types": []
+    }
   ],
   "dependencies": {
-    "nan": "^2.12.1"
+    "nan": "^2.17.0"
   },
   "devDependencies": {
     "tree-sitter-cli": "^CLI_VERSION"
