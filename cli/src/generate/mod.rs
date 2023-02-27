@@ -65,7 +65,6 @@ pub fn generate_parser_in_directory(
         None => {
             let grammar_js_path = grammar_path.map_or(repo_path.join("grammar.js"), |s| s.into());
             grammar_json = load_grammar_file(&grammar_js_path)?;
-            fs::write(&src_path.join("grammar.json"), &grammar_json)?;
         }
     }
 
@@ -88,6 +87,10 @@ pub fn generate_parser_in_directory(
         abi_version,
         report_symbol_name,
     )?;
+
+    if grammar_path.is_none() {
+        fs::write(&src_path.join("grammar.json"), &grammar_json)?;
+    }
 
     write_file(&src_path.join("parser.c"), c_code)?;
     write_file(&src_path.join("node-types.json"), node_types_json)?;
