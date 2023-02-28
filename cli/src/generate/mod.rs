@@ -148,6 +148,7 @@ fn generate_skel_in_empty_dir(repo_path: &Path, no_custom_grammar_path: bool) ->
             /src/node-types.json
             /src/grammar.json
             /src/parser.c
+            /src/*.o
         "};
         let gitignore_path = repo_path.join(".gitignore");
         fs::write(gitignore_path, gitingore_template)
