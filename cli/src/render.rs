@@ -840,8 +840,12 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                         loop {
                             let v;
                             if let Some(idx) = value.find('\n') {
-                                v = &value[..idx + 1];
-                                value = &value[idx + 1..];
+                                if idx + 1 == value.len() {
+                                    v = value;
+                                } else {
+                                    v = &value[..idx + 1];
+                                    value = &value[idx + 1..];
+                                }
                             } else {
                                 v = value;
                             }
