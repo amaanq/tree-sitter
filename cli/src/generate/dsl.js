@@ -68,7 +68,7 @@ function prec(number, rule) {
   };
 }
 
-prec.left = function(number, rule) {
+prec.left = function (number, rule) {
   if (rule == null) {
     rule = number;
     number = 0;
@@ -89,7 +89,7 @@ prec.left = function(number, rule) {
   };
 }
 
-prec.right = function(number, rule) {
+prec.right = function (number, rule) {
   if (rule == null) {
     rule = number;
     number = 0;
@@ -110,7 +110,7 @@ prec.right = function(number, rule) {
   };
 }
 
-prec.dynamic = function(number, rule) {
+prec.dynamic = function (number, rule) {
   checkPrecedence(number);
   checkArguments(
     arguments.length - 1,
@@ -163,7 +163,7 @@ function token(value) {
   };
 }
 
-token.immediate = function(value) {
+token.immediate = function (value) {
   return {
     type: "IMMEDIATE_TOKEN",
     content: normalize(value)
@@ -381,7 +381,7 @@ function grammar(baseGrammar, options) {
     throw new Error("Grammar must have at least one rule.");
   }
 
-  return {name, word, rules, extras, conflicts, precedences, externals, inline, supertypes};
+  return { name, word, rules, extras, conflicts, precedences, externals, inline, supertypes };
 }
 
 function checkArguments(ruleCount, caller, callerName, suffix = '') {
