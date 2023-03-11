@@ -23,7 +23,7 @@ function alias(rule, value) {
       }
   }
 
-  throw new Error('Invalid alias value ' + value);
+  throw new Error('Invalid alias value: ' + value);
 }
 
 function blank() {
@@ -204,7 +204,7 @@ function RuleBuilder(ruleMap) {
       if (!ruleMap || ruleMap.hasOwnProperty(propertyName)) {
         return symbol;
       } else {
-        const error = new ReferenceError(`Undefined symbol '${propertyName}'`);
+        const error = new ReferenceError(`Undefined rule: '${propertyName}'`);
         error.symbol = symbol;
         return error;
       }
@@ -276,7 +276,7 @@ function grammar(baseGrammar, options) {
     for (const ruleName in options.rules) {
       const ruleFn = options.rules[ruleName];
       if (typeof ruleFn !== "function") {
-        throw new Error("Grammar rules must all be functions. '" + ruleName + "' rule is not.");
+        throw new Error("Grammar's 'rules' must all be functions. '" + ruleName + "' rule is not.");
       }
       rules[ruleName] = normalize(ruleFn.call(ruleBuilder, ruleBuilder, baseGrammar.rules[ruleName]));
     }
@@ -319,12 +319,12 @@ function grammar(baseGrammar, options) {
     const conflictRules = options.conflicts.call(ruleBuilder, ruleBuilder, baseConflictRules);
 
     if (!Array.isArray(conflictRules)) {
-      throw new Error("Grammar's conflicts must be an array of arrays of rules.");
+      throw new Error("Grammar's 'conflicts' must be an array of arrays of rules.");
     }
 
     conflicts = conflictRules.map(conflictSet => {
       if (!Array.isArray(conflictSet)) {
-        throw new Error("Grammar's conflicts must be an array of arrays of rules.");
+        throw new Error("Grammar's 'conflicts' must be an array of arrays of rules.");
       }
 
       return conflictSet.map(symbol => normalize(symbol).name);
@@ -384,11 +384,11 @@ function grammar(baseGrammar, options) {
     }
     precedences = options.precedences.call(ruleBuilder, ruleBuilder, baseGrammar.precedences);
     if (!Array.isArray(precedences)) {
-      throw new Error("Grammar's precedences must be an array of arrays of rules.");
+      throw new Error("Grammar's 'precedences' must be an array of arrays of rules.");
     }
     precedences = precedences.map(list => {
       if (!Array.isArray(list)) {
-        throw new Error("Grammar's precedences must be an array of arrays of rules.");
+        throw new Error("Grammar's 'precedences' must be an array of arrays of rules.");
       }
       return list.map(normalize);
     });
