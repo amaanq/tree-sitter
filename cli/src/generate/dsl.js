@@ -300,8 +300,11 @@ function grammar(baseGrammar, options) {
 
   let word = baseGrammar.word;
   if (options.word) {
-    word = options.word.call(ruleBuilder, ruleBuilder).name;
-    if (typeof word != 'string') {
+    word = options.word.call(ruleBuilder, ruleBuilder);
+    if (word.constructor == ReferenceError) throw word;
+    if (typeof word.type === 'string') {
+      word = word.name;
+    } else {
       throw new Error("Grammar's 'word' property must be a named rule.");
     }
   }
@@ -338,10 +341,17 @@ function grammar(baseGrammar, options) {
     const inlineRules = options.inline.call(ruleBuilder, ruleBuilder, baseInlineRules);
 
     if (!Array.isArray(inlineRules)) {
-      throw new Error("Grammar's inline must be an array of rules.");
+      throw new Error("Grammar's 'inline' must be an array of rules.");
     }
 
-    inline = inlineRules.map(symbol => symbol.name);
+    inline = inlineRules.map(symbol => {
+      if (symbol.constructor == ReferenceError) throw symbol;
+      if (typeof symbol.type === 'string') {
+        return symbol.name;
+      } else {
+        throw new TypeError("Grammar's 'inline' has invalid rule reference: " + symbol.toString());
+      }
+    });
   }
 
   let supertypes = baseGrammar.supertypes;
@@ -354,10 +364,17 @@ function grammar(baseGrammar, options) {
     const supertypeRules = options.supertypes.call(ruleBuilder, ruleBuilder, baseSupertypeRules);
 
     if (!Array.isArray(supertypeRules)) {
-      throw new Error("Grammar's supertypes must be an array of rules.");
+      throw new Error("Grammar's 'supertypes' must be an array of rules.");
     }
 
-    supertypes = supertypeRules.map(symbol => symbol.name);
+    supertypes = supertypeRules.map(symbol => {
+      if (symbol.constructor == ReferenceError) throw symbol;
+      if (typeof symbol.type === 'string') {
+        return symbol.name;
+      } else {
+        throw new TypeError("Grammar's 'supertypes' has invalid rule reference: " + symbol.toString());
+      }
+    });
   }
 
   let precedences = baseGrammar.precedences;
