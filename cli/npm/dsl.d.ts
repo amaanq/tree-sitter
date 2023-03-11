@@ -35,8 +35,6 @@ type Rule =
 
 type RuleOrLiteral = Rule | RegExp | string;
 
-type ExternalSymbol = SymbolRule<string> | string;
-
 type GrammarSymbols<RuleName extends string> = {
   [name in RuleName]: SymbolRule<name>;
 } &
@@ -104,7 +102,7 @@ interface Grammar<
   externals?: (
     $: Record<string, SymbolRule<string>>,
     previous: Rule[],
-  ) => ExternalSymbol[];
+  ) => (SymbolRule<string> | RegExp | string)[];
 
   /**
    * An array of tokens that may appear anywhere in the language. This
