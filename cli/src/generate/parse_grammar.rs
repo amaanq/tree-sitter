@@ -1,6 +1,6 @@
 use super::grammars::{InputGrammar, PrecedenceEntry, Variable, VariableType};
 use super::rules::{Precedence, Rule};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
@@ -90,7 +90,8 @@ pub(crate) struct GrammarJSON {
 }
 
 pub(crate) fn parse_grammar(input: &str) -> Result<InputGrammar> {
-    let grammar_json: GrammarJSON = serde_json::from_str(&input)?;
+    let grammar_json: GrammarJSON =
+        serde_json::from_str(&input).with_context(|| "Can't deserialize grammar.json")?;
 
     let mut variables = Vec::with_capacity(grammar_json.rules.len());
     for (name, value) in grammar_json.rules {
