@@ -127,8 +127,8 @@ fn generate_skel_in_empty_dir(repo_path: &Path, no_custom_grammar_path: bool) ->
                     name: '{grammar_name}',
 
                     rules: {{
-                    // TODO: add the actual grammar rules
-                    source_file: $ => 'hello'
+                         // TODO: add the actual grammar rules
+                        source_file: $ => 'hello'
                     }}
                 }});
             "};
