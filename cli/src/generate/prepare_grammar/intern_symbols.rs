@@ -1,7 +1,7 @@
 use super::InternedGrammar;
 use crate::generate::grammars::{InputGrammar, Variable, VariableType};
 use crate::generate::rules::{Rule, Symbol};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 
 pub(super) fn intern_symbols(grammar: &InputGrammar) -> Result<InternedGrammar> {
     let interner = Interner { grammar };
@@ -15,13 +15,17 @@ pub(super) fn intern_symbols(grammar: &InputGrammar) -> Result<InternedGrammar> 
         variables.push(Variable {
             name: variable.name.clone(),
             kind: variable_type_for_name(&variable.name),
-            rule: interner.intern_rule(&variable.rule)?,
+            rule: interner
+                .intern_rule(&variable.rule)
+                .with_context(|| "Grammar's 'rules' propety error")?,
         });
     }
 
     let mut external_tokens = Vec::with_capacity(grammar.external_tokens.len());
     for external_token in grammar.external_tokens.iter() {
-        let rule = interner.intern_rule(&external_token)?;
+        let rule = interner
+            .intern_rule(&external_token)
+            .with_context(|| "Grammar's 'externals' propety error")?;
         let (name, kind) = if let Rule::NamedSymbol(name) = external_token {
             (name.clone(), variable_type_for_name(&name))
         } else {
@@ -32,7 +36,11 @@ pub(super) fn intern_symbols(grammar: &InputGrammar) -> Result<InternedGrammar> 
 
     let mut extra_symbols = Vec::with_capacity(grammar.extra_symbols.len());
     for extra_token in grammar.extra_symbols.iter() {
-        extra_symbols.push(interner.intern_rule(extra_token)?);
+        extra_symbols.push(
+            interner
+                .intern_rule(extra_token)
+                .with_context(|| "Grammar's 'extras' propety error")?,
+        );
     }
 
     let mut supertype_symbols = Vec::with_capacity(grammar.supertype_symbols.len());
@@ -40,7 +48,8 @@ pub(super) fn intern_symbols(grammar: &InputGrammar) -> Result<InternedGrammar> 
         supertype_symbols.push(
             interner
                 .intern_name(supertype_symbol_name)
-                .ok_or_else(|| anyhow!("Undefined symbol `{}`", supertype_symbol_name))?,
+                .ok_or_else(|| anyhow!("Undefined symbol `{}`", supertype_symbol_name))
+                .with_context(|| "Grammar's 'supertypes' propety error")?,
         );
     }
 
@@ -51,7 +60,8 @@ pub(super) fn intern_symbols(grammar: &InputGrammar) -> Result<InternedGrammar> 
             interned_conflict.push(
                 interner
                     .intern_name(&name)
-                    .ok_or_else(|| anyhow!("Undefined symbol `{}`", name))?,
+                    .ok_or_else(|| anyhow!("Undefined symbol `{}`", name))
+                    .with_context(|| "Grammar's 'conficts' propety error")?,
             );
         }
         expected_conflicts.push(interned_conflict);
@@ -59,9 +69,11 @@ pub(super) fn intern_symbols(grammar: &InputGrammar) -> Result<InternedGrammar> 
 
     let mut variables_to_inline = Vec::new();
     for name in grammar.variables_to_inline.iter() {
-        if let Some(symbol) = interner.intern_name(&name) {
-            variables_to_inline.push(symbol);
-        }
+        let symbol = interner
+            .intern_name(&name)
+            .ok_or_else(|| anyhow!("Undefined symbol `{}`", name))
+            .with_context(|| "Grammar's 'inline' propety error")?;
+        variables_to_inline.push(symbol);
     }
 
     let mut word_token = None;
@@ -69,7 +81,8 @@ pub(super) fn intern_symbols(grammar: &InputGrammar) -> Result<InternedGrammar> 
         word_token = Some(
             interner
                 .intern_name(&name)
-                .ok_or_else(|| anyhow!("Undefined symbol `{}`", &name))?,
+                .ok_or_else(|| anyhow!("Undefined symbol `{}`", &name))
+                .with_context(|| "Grammar's 'word' propety error")?,
         );
     }
 
