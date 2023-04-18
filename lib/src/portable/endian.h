@@ -13,7 +13,7 @@
 
 #endif
 
-#if defined(__linux__) || defined(__CYGWIN__)
+#if defined(__linux__) || defined(__CYGWIN__) || defined(__wasm__)
 
 // It defined in <features.h> by _GNU_SOURCE -> _DEFAULT_SOURCE -> __USE_MISC
 // but we don't need all other things for this simple case.
