@@ -213,6 +213,7 @@ fn run() -> Result<()> {
                             .long("timeout")
                             .num_args(1),
                     )
+                    .arg(Arg::new("output-dot").long("dot").action(ArgAction::SetTrue))
                     .arg(&debug_arg)
                     .arg(&debug_build_arg)
                     .arg(&debug_graph_arg)
@@ -237,6 +238,8 @@ fn run() -> Result<()> {
                             .index(1)
                             .required(true),
                     )
+                    .arg(&time_arg)
+                    .arg(&quiet_arg)
                     .arg(&paths_arg.clone().index(2))
                     .arg(&scope_arg)
                     .arg(&paths_file_arg)
@@ -460,6 +463,7 @@ fn run() -> Result<()> {
         Some(("parse", matches)) => {
             let libdir = matches.get_one_str("libdir").or(libdir);
             let output = matches.get_one::<OutputFormat>("output");
+            let output_dot = matches.get_flag("output-dot");
             let scope = matches.get_one_str("scope");
             let edits = matches.get_many_str("edits");
             let edits = edits.as_ref().map(Vec::as_ref);
@@ -512,6 +516,7 @@ fn run() -> Result<()> {
                 let this_file_errored = parse::parse_input(
                     input?,
                     output,
+                    output_dot,
                     edits,
                     apply_edits,
                     &limit_ranges,
@@ -562,6 +567,8 @@ fn run() -> Result<()> {
                 r[0].parse().unwrap()..r[1].parse().unwrap()
             });
             let limit_ranges = matches.get_occurrences_str("limit-ranges");
+            let quiet = matches.get_flag("quiet");
+            let time = matches.get_flag("time");
 
             let loader_config = config.get()?;
             let mut loader = loader_with_libdir(libdir)?;
@@ -576,6 +583,8 @@ fn run() -> Result<()> {
                 range,
                 &limit_ranges,
                 should_test,
+                quiet,
+                time,
             )?;
         }
 

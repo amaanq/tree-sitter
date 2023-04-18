@@ -9,6 +9,7 @@ use std::{
     io::{self, Write},
     ops::Range,
     path::{Path, PathBuf},
+    time::Instant,
 };
 use tree_sitter::{Language, Parser, Point, Query, QueryCapture, QueryCursor};
 
@@ -20,6 +21,8 @@ pub fn query_files_at_paths(
     range: Option<Range<usize>>,
     limit_ranges: &Option<Vec<Vec<&str>>>,
     should_test: bool,
+    quiet: bool,
+    print_time: bool,
 ) -> Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
@@ -84,6 +87,7 @@ pub fn query_files_at_paths(
 
         let mut last_row = usize::MAX;
 
+        let start = Instant::now();
         if ordered_captures {
             for (m, capture_index) in
                 query_cursor.captures(&query, tree.root_node(), source_code.as_slice())
@@ -107,29 +111,31 @@ pub fn query_files_at_paths(
                 let capture_name = &query.capture_names()[capture_index as usize];
                 let (pos, pos_c, ml) = format_pos(&capture, &mut last_row, &c);
                 let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
-                let text = if ml {
-                    let capture_text = capture_text.lines().next().unwrap();
-                    format!(
-                        "{BK}`{CT}{capture_text}{BK}`{R}...",
-                        CT = c.text.prefix(),
-                        BK = c.backtick.prefix(),
-                        R = c.backtick.suffix()
-                    )
-                } else {
-                    format!(
-                        "{BK}`{CT}{capture_text}{BK}`{R}",
-                        CT = c.text.prefix(),
-                        BK = c.backtick.prefix(),
-                        R = c.backtick.suffix()
-                    )
-                };
-                #[rustfmt::skip]
-                writeln!(
-                    &mut stdout,
-                    "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
-                    pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len,
-                    P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
-                )?;
+                if !quiet {
+                    let text = if ml {
+                        let capture_text = capture_text.lines().next().unwrap();
+                        format!(
+                            "{BK}`{CT}{capture_text}{BK}`{R}...",
+                            CT = c.text.prefix(),
+                            BK = c.backtick.prefix(),
+                            R = c.backtick.suffix()
+                        )
+                    } else {
+                        format!(
+                            "{BK}`{CT}{capture_text}{BK}`{R}",
+                            CT = c.text.prefix(),
+                            BK = c.backtick.prefix(),
+                            R = c.backtick.suffix()
+                        )
+                    };
+                    #[rustfmt::skip]
+                    writeln!(
+                        &mut stdout,
+                        "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
+                        pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len,
+                        P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
+                    )?;
+                }
                 results.push(query_testing::CaptureInfo {
                     name: capture_name.to_string(),
                     start: capture.node.start_position(),
@@ -165,30 +171,32 @@ pub fn query_files_at_paths(
                     let capture_name = &query.capture_names()[capture_index as usize];
                     let (pos, pos_c, ml) = format_pos(capture, &mut last_row, &c);
                     let capture_text = capture.node.utf8_text(&source_code).unwrap_or("");
-                    let text = if ml {
-                        let capture_text = capture_text.lines().next().unwrap();
-                        format!(
-                            "{BK}`{CT}{capture_text}{BK}`{R}...",
-                            CT = c.text.prefix(),
-                            BK = c.backtick.prefix(),
-                            R = c.backtick.suffix()
-                        )
-                    } else {
-                        format!(
-                            "{BK}`{CT}{capture_text}{BK}`{R}",
-                            CT = c.text.prefix(),
-                            BK = c.backtick.prefix(),
-                            R = c.backtick.suffix()
-                        )
-                    };
-                    let capture_name = format!("{capture_pad}{capture_name}");
-                    #[rustfmt::skip]
-                    writeln!(
-                            &mut stdout,
-                            "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
-                            pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len2,
-                            P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
-                        )?;
+                    if !quiet {
+                        let text = if ml {
+                            let capture_text = capture_text.lines().next().unwrap();
+                            format!(
+                                "{BK}`{CT}{capture_text}{BK}`{R}...",
+                                CT = c.text.prefix(),
+                                BK = c.backtick.prefix(),
+                                R = c.backtick.suffix()
+                            )
+                        } else {
+                            format!(
+                                "{BK}`{CT}{capture_text}{BK}`{R}",
+                                CT = c.text.prefix(),
+                                BK = c.backtick.prefix(),
+                                R = c.backtick.suffix()
+                            )
+                        };
+                        let capture_name = format!("{capture_pad}{capture_name}");
+                        #[rustfmt::skip]
+                        writeln!(
+                                &mut stdout,
+                                "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
+                                pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len2,
+                                P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
+                            )?;
+                    }
                     results.push(query_testing::CaptureInfo {
                         name: capture_name.to_string(),
                         start: capture.node.start_position(),
@@ -211,6 +219,9 @@ pub fn query_files_at_paths(
         }
         if show_file_names > 0 {
             show_file_names -= 1;
+        }
+        if print_time {
+            writeln!(&mut stdout, "{:?}", start.elapsed())?;
         }
     }
 

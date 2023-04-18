@@ -569,7 +569,7 @@ recur:
   return ts_node__null();
 }
 
-static inline const char *ts_node__field_name_for_child(TSNode self, uint32_t structural_child_index) {
+static inline const char *ts_node__field_name_from_language(TSNode self, uint32_t structural_child_index) {
     const TSFieldMapEntry *field_map, *field_map_end;
     ts_language_field_map(
       self.tree->language,
@@ -599,7 +599,7 @@ const char *ts_node_field_name_for_child(TSNode self, uint32_t child_index) {
     while (ts_node_child_iterator_next(&iterator, &child)) {
       if (ts_node__is_relevant(child, true)) {
         if (index == child_index) {
-          const char *field_name = ts_node__field_name_for_child(result, iterator.structural_child_index - 1);
+          const char *field_name = ts_node__field_name_from_language(result, iterator.structural_child_index - 1);
           if (field_name) return field_name;
           return inherited_field_name;
         }
@@ -608,7 +608,7 @@ const char *ts_node_field_name_for_child(TSNode self, uint32_t child_index) {
         uint32_t grandchild_index = child_index - index;
         uint32_t grandchild_count = ts_node__relevant_child_count(child, true);
         if (grandchild_index < grandchild_count) {
-          const char *field_name = ts_node__field_name_for_child(result, iterator.structural_child_index - 1);
+          const char *field_name = ts_node__field_name_from_language(result, iterator.structural_child_index - 1);
           if (field_name) inherited_field_name = field_name;
 
           did_descend = true;
