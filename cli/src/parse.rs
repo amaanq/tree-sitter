@@ -80,6 +80,7 @@ impl fmt::Display for Stats {
 pub fn parse_input(
     mut input: ParserInput,
     output: Option<&OutputFormat>,
+    output_dot: bool,
     edits: Option<&[&str]>,
     apply_edits: bool,
     limit_ranges: &Option<Vec<Vec<&str>>>,
@@ -101,13 +102,10 @@ pub fn parse_input(
 
     // Set a timeout based on the `--time` flag.
     parser.set_timeout_micros(timeout);
-
     // Render an HTML graph if `--debug-graph` was passed
-    if debug_graph {
-        util::log_graphs(&mut parser, "log.html")?;
-    }
+
     // Log to stderr if `--debug` was passed
-    else if debug {
+    if debug {
         parser.set_logger(Some(Box::new(|log_type, message| {
             if log_type == LogType::Lex {
                 io::stderr().write(b"  ").unwrap();
@@ -281,6 +279,10 @@ pub fn parse_input(
             if show_text {
                 render_text(&mut stdout, row_offset, &input.source_code[bom_len..])?;
             }
+        }
+
+        if output_dot {
+            util::print_tree_graph(&tree, "log.html").unwrap();
         }
 
         let mut stdout = stdout.lock();

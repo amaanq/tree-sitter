@@ -9,6 +9,7 @@ readme = "README.md"
 keywords = ["incremental", "parsing"]
 categories = ["command-line-utilities", "parsing"]
 repository = "https://github.com/tree-sitter/tree-sitter"
+rust-version.workspace = true
 
 [[bin]]
 name = "tree-sitter"
@@ -36,6 +37,7 @@ html-escape = "0.2"
 indexmap = "1.9"
 lazy_static = "1.4"
 log = { version = "0.4", features = ["std"] }
+path-slash = "0.2"
 regex = "1.7"
 regex-syntax = "0.6"
 rustc-hash = "1"
@@ -50,12 +52,16 @@ which = "4.4"
 indoc = "2"
 
 [dev-dependencies]
+proc_macro = { path = "src/tests/proc_macro", package = "tree-sitter-tests-proc-macro" }
+
 rand = "0.8"
 tempfile = "3"
 pretty_assertions = "1.3"
 libloading = "0.7"
 ctor = "0.1"
 convert_case = "0.6.0"
+unindent = "0.2"
+indoc = "2.0.1"
 
 [build-dependencies]
 toml = "0.6"

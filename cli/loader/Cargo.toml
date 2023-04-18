@@ -9,6 +9,7 @@ readme = "README.md"
 keywords = ["incremental", "parsing"]
 categories = ["command-line-utilities", "parsing"]
 repository = "https://github.com/tree-sitter/tree-sitter"
+rust-version.workspace = true
 
 [dependencies]
 tree-sitter = { path = "../../lib", version = "0.21.0-alpha.1" }
