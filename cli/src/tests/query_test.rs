@@ -1,16 +1,17 @@
 use super::helpers::{
     allocations,
     fixtures::get_language,
-    query_helpers::{Match, Pattern},
+    query_helpers::{assert_query_matches, Match, Pattern},
     ITERATION_COUNT,
 };
+use crate::tests::helpers::query_helpers::{collect_captures, collect_matches};
 use indoc::indoc;
 use lazy_static::lazy_static;
 use rand::{prelude::StdRng, SeedableRng};
 use std::{env, fmt::Write};
 use tree_sitter::{
-    CaptureQuantifier, Language, Node, Parser, Point, Query, QueryCapture, QueryCursor, QueryError,
-    QueryErrorKind, QueryMatch, QueryPredicate, QueryPredicateArg, QueryProperty,
+    CaptureQuantifier, Language, Node, Parser, Point, Query, QueryCursor, QueryError,
+    QueryErrorKind, QueryPredicate, QueryPredicateArg, QueryProperty,
 };
 use unindent::Unindent;
 
@@ -4575,55 +4576,18 @@ fn test_query_max_start_depth() {
     });
 }
 
-fn assert_query_matches(
-    language: Language,
-    query: &Query,
-    source: &str,
-    expected: &[(usize, Vec<(&str, &str)>)],
-) {
-    let mut parser = Parser::new();
-    parser.set_language(language).unwrap();
-    let tree = parser.parse(source, None).unwrap();
-    let mut cursor = QueryCursor::new();
-    let matches = cursor.matches(&query, tree.root_node(), source.as_bytes());
-    assert_eq!(collect_matches(matches, &query, source), expected);
-    assert_eq!(cursor.did_exceed_match_limit(), false);
-}
+#[test]
+fn test_query_error_does_not_oob() {
+    let language = get_language("javascript");
 
-fn collect_matches<'a>(
-    matches: impl Iterator<Item = QueryMatch<'a, 'a>>,
-    query: &'a Query,
-    source: &'a str,
-) -> Vec<(usize, Vec<(&'a str, &'a str)>)> {
-    matches
-        .map(|m| {
-            (
-                m.pattern_index,
-                format_captures(m.captures.iter().cloned(), query, source),
-            )
-        })
-        .collect()
-}
-
-fn collect_captures<'a>(
-    captures: impl Iterator<Item = (QueryMatch<'a, 'a>, usize)>,
-    query: &'a Query,
-    source: &'a str,
-) -> Vec<(&'a str, &'a str)> {
-    format_captures(captures.map(|(m, i)| m.captures[i]), query, source)
-}
-
-fn format_captures<'a>(
-    captures: impl Iterator<Item = QueryCapture<'a>>,
-    query: &'a Query,
-    source: &'a str,
-) -> Vec<(&'a str, &'a str)> {
-    captures
-        .map(|capture| {
-            (
-                query.capture_names()[capture.index as usize].as_str(),
-                capture.node.utf8_text(source.as_bytes()).unwrap(),
-            )
-        })
-        .collect()
+    assert_eq!(
+        Query::new(language, "(clas").unwrap_err(),
+        QueryError {
+            row: 0,
+            offset: 1,
+            column: 1,
+            kind: QueryErrorKind::NodeType,
+            message: "clas".to_string()
+        }
+    );
 }
