@@ -498,7 +498,7 @@ fn run() -> Result<()> {
             let timeout = matches
                 .get_one::<String>("timeout")
                 .map_or(0, |t| u64::from_str_radix(t, 10).unwrap());
-            let cancellation_flag = util::cancel_on_stdin();
+            let cancellation_flag = util::cancel_on_signal();
 
             if debug {
                 // For augmenting debug logging in external scanners
@@ -619,7 +619,7 @@ fn run() -> Result<()> {
             loader.configure_highlights(&theme_config.theme.highlight_names);
             loader.find_all_languages(&loader_config)?;
 
-            let cancellation_flag = util::cancel_on_stdin();
+            let cancellation_flag = util::cancel_on_signal();
 
             let mut lang = None;
             if let Some(scope) = matches.get_one_str("scope") {
