@@ -832,7 +832,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                         }
                     };
 
-                    if node.kind() != value {
+                    if node.kind() != value || node.is_named() {
                         let mut multiline = false;
                         let mut row = node.start_position().row;
                         let mut pos_color = self.color.pos2;
