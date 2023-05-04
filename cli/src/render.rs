@@ -886,11 +886,14 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             if node.is_error() {
                 self.write_colored("ERROR: ", self.color.error)?;
             }
-            let s = escape_chars(node.kind()).collect();
+            let s;
             let s = if self.flags.unquoted_anonymous {
-                s
+                // TODO: What if an anonymous kind has would have spaces? Or would be consist only from space(s)?
+                //       Then always qoute a spaced anonymous? With a different quotes? With a different color for qoutes?
+                node.kind()
             } else {
-                format!("\"{}\"", s)
+                s = format!("\"{}\"", escape_chars(node.kind()).collect::<String>());
+                s.as_str()
             };
             self.write_colored(&*s, node_color)?;
         }
