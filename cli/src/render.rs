@@ -781,9 +781,8 @@ impl<'a, W: Write> CstRenderer<'a, W> {
     }
 
     #[inline(always)]
-    fn node(&mut self, context: &Context) -> Result {
-        let node = context.node();
-        let node_color = if node.is_error() {
+    fn select_node_color(&mut self, node: &Node) -> Style {
+        if node.is_error() {
             self.color.error
         } else if node.is_extra() {
             self.color.extra
@@ -791,12 +790,18 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             self.color.nonterm
         } else {
             self.color.term
-        };
+        }
+    }
+
+    #[inline(always)]
+    fn node(&mut self, context: &Context) -> Result {
+        let node = context.node();
+        let node_color = self.select_node_color(&node);
         if node.is_missing() {
             self.write_colored("MISSING: ", self.color.missing)?;
         }
         if let Some(field_name) = context.field_name() {
-            write!(self.stdout, "{}: ", self.color.field.paint(field_name),)?;
+            write!(self.stdout, "{}: ", self.color.field.paint(field_name))?;
         }
         if node.is_named() {
             self.write_colored(node.kind(), node_color)?;
