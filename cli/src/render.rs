@@ -857,11 +857,9 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                             pos.clear();
                             let mut p = self.indent_base;
                             if self.flags.show_positions {
-                                let col = if multiline {
-                                    0
-                                } else {
-                                    node.start_position().column
-                                };
+                                let col = multiline
+                                    .then_some(0)
+                                    .unwrap_or_else(|| node.start_position().column);
                                 write!(&mut pos, "{}:{:<2} - {}:{}", row, col, row, v.len())?;
                                 p -= pos.len();
                             };
