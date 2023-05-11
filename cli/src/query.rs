@@ -131,7 +131,7 @@ pub fn query_files_at_paths(
                     #[rustfmt::skip]
                     writeln!(
                         &mut stdout,
-                        "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
+                        "{P}{pos:<20} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
                         pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len,
                         P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                     )?;
@@ -143,11 +143,12 @@ pub fn query_files_at_paths(
                 });
             }
         } else {
+            const DRAW_ELEMENTS: [char; 4] = ['┬', '┴', '│', '╶']; // '┌', '└' | '┬', '┴'
             for m in query_cursor.matches(&query, tree.root_node(), source_code.as_slice()) {
-                let mut capture_pad = "";
                 let max_capture_name_len2 = max_capture_name_len + 1;
                 let mut pattern_index = usize::MAX;
-                for capture in m.captures {
+                let last_idx = m.captures.len() - 1;
+                for (idx, capture) in m.captures.iter().enumerate() {
                     let check = NodeRangeCheck::check_parent_scoped(
                         &mut tree_cursor,
                         &mut limit_ranges,
@@ -164,7 +165,6 @@ pub fn query_files_at_paths(
                         pattern_index = m.pattern_index;
                         c.field
                     } else {
-                        capture_pad = " ";
                         c.pos2
                     };
                     let capture_index = capture.index;
@@ -177,7 +177,7 @@ pub fn query_files_at_paths(
                             format!(
                                 "{BK}`{CT}{capture_text}{BK}` {CF}...{R}",
                                 CT = c.text.prefix(),
-                                CF=c.nonterm.prefix(),
+                                CF = c.nonterm.prefix(),
                                 BK = c.backtick.prefix(),
                                 R = c.backtick.suffix()
                             )
@@ -189,13 +189,23 @@ pub fn query_files_at_paths(
                                 R = c.backtick.suffix()
                             )
                         };
-                        let capture_name = format!("{capture_pad}{capture_name}");
+                        let capture_match_drawing = if idx == 0 {
+                            if last_idx == 0 {
+                                DRAW_ELEMENTS[3]
+                            } else {
+                                DRAW_ELEMENTS[0]
+                            }
+                        } else if idx == last_idx {
+                            DRAW_ELEMENTS[1]
+                        } else {
+                            DRAW_ELEMENTS[2]
+                        };
                         #[rustfmt::skip]
                         writeln!(
                                 &mut stdout,
-                                "{P}{pos:<18} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
-                                pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len2,
-                                P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
+                                "{P}{pos:<20} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CM}{cm} {CN}{cn:<max_cn$} {text}",
+                                pi=pattern_index, ci=capture_index, cm=capture_match_drawing, cn=capture_name, max_cn=max_capture_name_len2,
+                                P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CM=c.lf.prefix(), CN=c.bytes.prefix(),
                             )?;
                     }
                     results.push(query_testing::CaptureInfo {
