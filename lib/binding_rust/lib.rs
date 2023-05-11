@@ -244,6 +244,7 @@ enum TextPredicate {
 
 // TODO: Remove this struct at at some point. If `core::str::lossy::Utf8Lossy`
 // is ever stabilized.
+#[doc(hidden)]
 pub struct LossyUtf8<'a> {
     bytes: &'a [u8],
     in_replacement: bool,
