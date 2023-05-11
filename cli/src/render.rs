@@ -781,7 +781,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
     }
 
     #[inline(always)]
-    fn select_node_color(&mut self, node: &Node) -> Style {
+    fn select_node_color(&self, node: &Node) -> Style {
         if node.is_error() {
             self.color.error
         } else if node.is_extra() {
