@@ -163,7 +163,7 @@ pub fn query_files_at_paths(
                     #[rustfmt::skip]
                     writeln!(
                         &mut stdout,
-                        "{P}{pos:<pos_align$} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
+                        "{P}{pos:<pos_align$} {PI}{pi:>2}{CL}:{CI}{ci:<2} {CN}{cn:<max_cn$} {text}",
                         pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len,
                         P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                     )?;
@@ -235,7 +235,7 @@ pub fn query_files_at_paths(
                         #[rustfmt::skip]
                         writeln!(
                                 &mut stdout,
-                                "{P}{pos:<pos_align$} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CM}{cm} {CN}{cn:<max_cn$} {text}",
+                                "{P}{pos:<pos_align$} {PI}{pi:>2}{CL}:{CI}{ci:<2} {CM}{cm} {CN}{cn:<max_cn$} {text}",
                                 pi=pattern_index, ci=capture_index, cm=capture_match_drawing, cn=capture_name, max_cn=max_capture_name_len2,
                                 P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CM=c.lf.prefix(), CN=c.bytes.prefix(),
                             )?;
