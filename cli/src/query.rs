@@ -146,8 +146,9 @@ pub fn query_files_at_paths(
                     let text = if ml {
                         let capture_text = capture_text.lines().next().unwrap();
                         format!(
-                            "{BK}`{CT}{capture_text}{BK}`{R}...",
+                            "{BK}`{CT}{capture_text}{BK}`{CF}...{R}",
                             CT = c.text.prefix(),
+                            CF = c.nonterm.prefix(),
                             BK = c.backtick.prefix(),
                             R = c.backtick.suffix()
                         )
