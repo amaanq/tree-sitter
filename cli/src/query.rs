@@ -4,6 +4,7 @@ use crate::{
 };
 use ansi_term::{Color, Style};
 use anyhow::{bail, Context, Result};
+use bstr::ByteSlice;
 use std::{
     collections::HashSet,
     fs,
@@ -76,14 +77,35 @@ pub fn query_files_at_paths(
         let source_code = source_code.as_slice();
 
         let scope = thread::scope(|s| {
-            let counts = s.spawn(|| bytecount::count(source_code, b'\n'));
+            let counts = s.spawn(|| {
+                let bstr = bstr::BStr::new(source_code);
+                let mut max_col_len = 0;
+                let mut col_len = 0;
+                let mut rows = 0;
+                for ch in bstr.chars() {
+                    match ch {
+                        '\n' => {
+                            rows += 1;
+                            if col_len > max_col_len {
+                                max_col_len = col_len;
+                            }
+                            col_len = 0;
+                        }
+                        _ => col_len += 1,
+                    }
+                }
+                if col_len > max_col_len {
+                    max_col_len = col_len;
+                }
+                (rows, max_col_len)
+            });
             (
                 parser.parse(&source_code, None).unwrap(),
                 counts.join().expect("Can't start a thread"),
             )
         });
-        let (tree, lines_count) = scope;
-        let pos_align = format!("{lines_count}:xxx - {lines_count}:xxx").len();
+        let (tree, (rows_count, max_col_len)) = scope;
+        let pos_align = format!("{rows_count}:{max_col_len} - {rows_count}:{max_col_len}").len();
 
         if show_file_names > 0 {
             writeln!(
