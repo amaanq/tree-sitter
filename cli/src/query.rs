@@ -4,11 +4,13 @@ use crate::{
 };
 use ansi_term::{Color, Style};
 use anyhow::{bail, Context, Result};
+use bstr::ByteSlice;
 use std::{
     fs,
     io::{self, Write},
     ops::Range,
     path::{Path, PathBuf},
+    thread,
     time::Instant,
 };
 use tree_sitter::{Language, Parser, Point, Query, QueryCapture, QueryCursor};
@@ -71,7 +73,38 @@ pub fn query_files_at_paths(
 
         let source_code =
             fs::read(&path).with_context(|| format!("Error reading source file {:?}", path))?;
-        let tree = parser.parse(&source_code, None).unwrap();
+        let source_code = source_code.as_slice();
+
+        let scope = thread::scope(|s| {
+            let counts = s.spawn(|| {
+                let bstr = bstr::BStr::new(source_code);
+                let mut max_col_len = 0;
+                let mut col_len = 0;
+                let mut rows = 0;
+                for ch in bstr.chars() {
+                    match ch {
+                        '\n' => {
+                            rows += 1;
+                            if col_len > max_col_len {
+                                max_col_len = col_len;
+                            }
+                            col_len = 0;
+                        }
+                        _ => col_len += 1,
+                    }
+                }
+                if col_len > max_col_len {
+                    max_col_len = col_len;
+                }
+                (rows, max_col_len)
+            });
+            (
+                parser.parse(&source_code, None).unwrap(),
+                counts.join().expect("Can't start a thread"),
+            )
+        });
+        let (tree, (rows_count, max_col_len)) = scope;
+        let pos_align = format!("{rows_count}:{max_col_len} - {rows_count}:{max_col_len}").len();
 
         if show_file_names > 0 {
             writeln!(
@@ -89,9 +122,7 @@ pub fn query_files_at_paths(
 
         let start = Instant::now();
         if ordered_captures {
-            for (m, capture_index) in
-                query_cursor.captures(&query, tree.root_node(), source_code.as_slice())
-            {
+            for (m, capture_index) in query_cursor.captures(&query, tree.root_node(), source_code) {
                 let pattern_index = m.pattern_index;
                 let capture = m.captures[capture_index];
 
@@ -131,7 +162,7 @@ pub fn query_files_at_paths(
                     #[rustfmt::skip]
                     writeln!(
                         &mut stdout,
-                        "{P}{pos:<20} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
+                        "{P}{pos:<pos_align$} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CN}{cn:<max_cn$} {text}",
                         pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len,
                         P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                     )?;
@@ -144,7 +175,7 @@ pub fn query_files_at_paths(
             }
         } else {
             const DRAW_ELEMENTS: [char; 4] = ['╷', '╵', '│', '╶']; // '┌', '└' | '┬', '┴' | '╷', '╵'
-            for m in query_cursor.matches(&query, tree.root_node(), source_code.as_slice()) {
+            for m in query_cursor.matches(&query, tree.root_node(), source_code) {
                 let max_capture_name_len2 = max_capture_name_len + 1;
                 let mut pattern_index = usize::MAX;
                 let last_idx = m.captures.len() - 1;
@@ -203,7 +234,7 @@ pub fn query_files_at_paths(
                         #[rustfmt::skip]
                         writeln!(
                                 &mut stdout,
-                                "{P}{pos:<20} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CM}{cm} {CN}{cn:<max_cn$} {text}",
+                                "{P}{pos:<pos_align$} {PI}{pi:>3}{CL}:{CI}{ci:<3} {CM}{cm} {CN}{cn:<max_cn$} {text}",
                                 pi=pattern_index, ci=capture_index, cm=capture_match_drawing, cn=capture_name, max_cn=max_capture_name_len2,
                                 P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CM=c.lf.prefix(), CN=c.bytes.prefix(),
                             )?;

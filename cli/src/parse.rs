@@ -1,5 +1,3 @@
-#![allow(unused_variables, unused_assignments)]
-
 use super::util;
 use crate::input::ParserInput;
 use crate::render::{
@@ -12,7 +10,7 @@ use anyhow::{anyhow, bail, Result};
 use std::io::{self, Write};
 use std::sync::atomic::AtomicUsize;
 use std::time::{Duration, Instant};
-use std::{fmt, usize};
+use std::{fmt, thread, usize};
 use tree_sitter::{InputEdit, LogType, Parser, Point, Tree};
 
 #[derive(Clone, Debug)]
@@ -122,17 +120,29 @@ pub fn parse_input(
 
     // let tree = parser.parse(&input.source_code, None);
 
-    let tree = match encoding {
-        Encoding::UTF8 => parser.parse(&input.source_code, None),
-        Encoding::UTF16LE => {
-            let source_code = as_u16_slice(&input.source_code);
-            parser.parse_utf16_le(source_code, None)
-        }
-        Encoding::UTF16BE => {
-            let source_code = as_u16_slice(&input.source_code);
-            parser.parse_utf16_be(source_code, None)
-        }
-    };
+    let scope = thread::scope(|s| {
+        let counts = s.spawn(|| {
+            (
+                input.source_code.len(),
+                bytecount::count(&input.source_code, b'\n'),
+            )
+        });
+        let tree = match encoding {
+            Encoding::UTF8 => parser.parse(&input.source_code, None),
+            Encoding::UTF16LE => {
+                let source_code = as_u16_slice(&input.source_code);
+                parser.parse_utf16_le(source_code, None)
+            }
+            Encoding::UTF16BE => {
+                let source_code = as_u16_slice(&input.source_code);
+                parser.parse_utf16_be(source_code, None)
+            }
+        };
+
+        let (bytes_count, lines_count) = counts.join().expect("Can't start a thread");
+        (tree, bytes_count, lines_count)
+    });
+    let (tree, bytes_count, lines_count) = scope;
 
     let mut stdout = io::stdout();
 
@@ -248,6 +258,7 @@ pub fn parse_input(
                             .original_nodes(&node_ids)
                             .changed_ranges(&changed_ranges)
                             .limit_ranges(&limit_ranges)
+                            .source_counts(bytes_count, lines_count)
                             .encoding(encoding)
                             .perform(cursor.clone())
                     };
