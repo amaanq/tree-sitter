@@ -105,6 +105,8 @@ pub fn query_files_at_paths(
         });
         let (tree, (rows_count, max_col_len)) = scope;
         let pos_align = format!("{rows_count}:{max_col_len} - {rows_count}:{max_col_len}").len();
+        let pat_align = format!("{}", query.pattern_count()).len();
+        let cap_align = format!("{}", query.capture_names().len()).len();
 
         if show_file_names > 0 {
             writeln!(
@@ -163,7 +165,7 @@ pub fn query_files_at_paths(
                     #[rustfmt::skip]
                     writeln!(
                         &mut stdout,
-                        "{P}{pos:<pos_align$} {PI}{pi:>2}{CL}:{CI}{ci:<2} {CN}{cn:<max_cn$} {text}",
+                        "{P}{pos:<pos_align$} {PI}{pi:>pat_align$}{CL}:{CI}{ci:<cap_align$} {CN}{cn:<max_cn$} {text}",
                         pi=pattern_index, ci=capture_index, cn=capture_name, max_cn=max_capture_name_len,
                         P=pos_c.prefix(), PI=c.field.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CN=c.bytes.prefix(),
                     )?;
@@ -235,7 +237,7 @@ pub fn query_files_at_paths(
                         #[rustfmt::skip]
                         writeln!(
                                 &mut stdout,
-                                "{P}{pos:<pos_align$} {PI}{pi:>2}{CL}:{CI}{ci:<2} {CM}{cm} {CN}{cn:<max_cn$} {text}",
+                                "{P}{pos:<pos_align$} {PI}{pi:>pat_align$}{CL}:{CI}{ci:<cap_align$} {CM}{cm} {CN}{cn:<max_cn$} {text}",
                                 pi=pattern_index, ci=capture_index, cm=capture_match_drawing, cn=capture_name, max_cn=max_capture_name_len2,
                                 P=pos_c.prefix(), PI=pat_c.prefix(), CL=c.text.prefix(), CI=c.nonterm.prefix(), CM=c.lf.prefix(), CN=c.bytes.prefix(),
                             )?;
