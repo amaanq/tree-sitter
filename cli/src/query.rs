@@ -106,7 +106,7 @@ pub fn query_files_at_paths(
         let (tree, (rows_count, max_col_len)) = scope;
         let pos_align = format!("{rows_count}:{max_col_len} - {rows_count}:{max_col_len}");
         eprintln!("{pos_align} - alignment pattern");
-        let pos_align = pos_align.len();
+        let pos_align = pos_align.len() + 1;
         let pat_align = format!("{}", query.pattern_count()).len();
         let cap_align = format!("{}", query.capture_names().len()).len();
 
@@ -295,7 +295,7 @@ fn format_pos(
         colors.pos2
     };
     (
-        format!("{start_row}:{start_column} - {end_row}:{end_column}"),
+        format!("{start_row}:{start_column:<3} - {end_row}:{end_column}"),
         pos_c,
         end_row > start_row,
     )
