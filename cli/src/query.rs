@@ -177,7 +177,7 @@ pub fn query_files_at_paths(
                 });
             }
         } else {
-            const DRAW_ELEMENTS: [char; 4] = ['╷', '╵', '│', '╶']; // '┌', '└' | '┬', '┴' | '╷', '╵'
+            const DRAW_ELEMENTS: [char; 4] = ['╷', '╵', '│', '·']; // '┌', '└' | '┬', '┴' | '╷', '╵'
             for m in query_cursor.matches(&query, tree.root_node(), source_code) {
                 let max_capture_name_len2 = max_capture_name_len + 1;
                 let mut pattern_index = usize::MAX;
