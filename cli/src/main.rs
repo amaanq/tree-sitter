@@ -1,6 +1,5 @@
 use anyhow::{anyhow, bail, Result};
 use clap::{crate_authors, crate_description, Arg, ArgAction, ArgMatches, Command};
-use loader::Loader;
 use std::path::{Path, PathBuf};
 use std::{env, fs, u64};
 use tree_sitter_cli::highlight::ThemeConfig;
@@ -11,7 +10,7 @@ use tree_sitter_cli::{
     util, wasm,
 };
 use tree_sitter_config::Config;
-use tree_sitter_loader as loader;
+use tree_sitter_loader::Loader;
 
 const VERSION: &str = env!("TREE_SITTER_CLI_VERSION");
 const DEFAULT_GENERATE_ABI_VERSION: usize = 14;
