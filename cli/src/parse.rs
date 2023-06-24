@@ -149,9 +149,6 @@ pub fn parse_input(
             if debug_graph {
                 println!("BEFORE:\n{}", String::from_utf8_lossy(&input.source_code));
             }
-
-            let old_tree = tree.clone();
-
             let mut i = 0;
             let mut edits = edits.iter();
             while let Some(position) = edits.next() {
@@ -173,10 +170,11 @@ pub fn parse_input(
                     );
                 }
             }
+            let edited_tree = tree.clone();
             if apply_edits {
-                tree = parser.parse(&input.source_code, Some(&tree)).unwrap();
+                tree = parser.parse(&input.source_code, Some(&edited_tree)).unwrap();
+                changed_ranges.replace(edited_tree.changed_ranges(&tree).collect());
             }
-            changed_ranges = Some(tree.changed_ranges(&old_tree).collect());
         }
 
         let duration = time.elapsed();

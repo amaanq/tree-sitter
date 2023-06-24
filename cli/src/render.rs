@@ -1190,6 +1190,7 @@ pub fn render_changed_ranges(stdout: &mut impl Write, changed_ranges: &[Range]) 
             P=c.term.prefix(), B=c.bytes.prefix(), R=c.nonterm.suffix()
         )?;
     }
+    stdout.flush()?;
     Ok(())
 }
 
