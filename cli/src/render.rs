@@ -177,9 +177,9 @@ impl ScopeRange {
                 }
             };
             let limit_range = match *start {
-                "change-path" => return check_value(ScopeRange::ChangePath),
-                "error-path" => return check_value(ScopeRange::ErrorPath),
-                "error" => return check_value(ScopeRange::Error),
+                "cp" | "change-path" => return check_value(ScopeRange::ChangePath),
+                "ep" | " error-path" => return check_value(ScopeRange::ErrorPath),
+                "e" | "error" => return check_value(ScopeRange::Error),
                 start => {
                     if input.len() == 1 {
                         match start.ends_with("-") {
