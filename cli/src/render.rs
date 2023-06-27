@@ -157,6 +157,7 @@ impl CstFlags {
 pub enum ScopeRange {
     Range { start: Point, end: Point },
     Node { start: Point },
+    ChangePath,
     ErrorPath,
     Error,
 }
@@ -168,23 +169,17 @@ impl ScopeRange {
         while let Some(input) = ranges.next() {
             let mut points = input.iter();
             let start = points.next().unwrap();
+            let check_value = |scope_range| {
+                if input.len() == 1 && inputs.len() == 1 {
+                    return Ok(vec![scope_range]);
+                } else {
+                    bail!("The `--limit-range {start}` can only be used standalone");
+                }
+            };
             let limit_range = match *start {
-                "error" => {
-                    if input.len() == 1 && inputs.len() == 1 {
-                        limit_ranges.push(ScopeRange::Error);
-                        return Ok(limit_ranges);
-                    } else {
-                        bail!("The `--limit-range error` can only be used standalone");
-                    }
-                }
-                "error-path" => {
-                    if input.len() == 1 && inputs.len() == 1 {
-                        limit_ranges.push(ScopeRange::ErrorPath);
-                        return Ok(limit_ranges);
-                    } else {
-                        bail!("The `--limit-range error-path` can only be used standalone");
-                    }
-                }
+                "change-path" => return check_value(ScopeRange::ChangePath),
+                "error-path" => return check_value(ScopeRange::ErrorPath),
+                "error" => return check_value(ScopeRange::Error),
                 start => {
                     if input.len() == 1 {
                         match start.ends_with("-") {
@@ -568,54 +563,63 @@ impl NodeRangeCheck {
         let mut pop = false;
         let mut hide_row = false;
         let mut draw_extra_lf = false;
-        if let Some(ranges) = limit_ranges {
-            if ranges.is_empty() {
-                hide_row = true;
-            } else {
-                let node_start = node.start_position();
-                // dbg!(&ranges, &tail_one);
-                if let Some((last, ranges)) = ranges.split_last_mut() {
-                    if let ScopeRange::Node { start } = last {
-                        if node_start >= *start {
-                            *last = ScopeRange::Range {
-                                start: *start,
-                                end: node.end_position(),
-                            };
+        'b: {
+            if let Some(ranges) = limit_ranges {
+                if ranges.is_empty() {
+                    hide_row = true;
+                } else {
+                    let node_start = node.start_position();
+                    // dbg!(&ranges, &tail_one);
+                    if let Some((last, ranges)) = ranges.split_last_mut() {
+                        if let ScopeRange::Node { start } = last {
+                            if node_start >= *start {
+                                *last = ScopeRange::Range {
+                                    start: *start,
+                                    end: node.end_position(),
+                                };
+                            }
+                        };
+
+                        let (range_start, range_end) = match last {
+                            ScopeRange::Range { start, end } => (&*start, &*end),
+                            ScopeRange::Node { start } => (&*start, &*start),
+                            ScopeRange::ChangePath => {
+                                if !node.has_changes() {
+                                    hide_row = true;
+                                }
+                                break 'b;
+                            }
+                            ScopeRange::ErrorPath => todo!(),
+                            ScopeRange::Error => todo!(),
+                        };
+
+                        if node_start < *range_start || node_start >= *range_end {
+                            hide_row = true;
                         }
-                    };
+                        if node_start >= *range_end {
+                            pop = true;
+                            if !ranges.is_empty() {
+                                draw_extra_lf = true;
+                            }
+                            if let Some(range) = ranges.last() {
+                                let range_start = match range {
+                                    ScopeRange::Range { start, .. } => start,
+                                    ScopeRange::Node { start } => start,
+                                    ScopeRange::ChangePath => todo!(),
+                                    ScopeRange::ErrorPath => todo!(),
+                                    ScopeRange::Error => todo!(),
+                                };
 
-                    let (range_start, range_end) = match last {
-                        ScopeRange::Range { start, end } => (&*start, &*end),
-                        ScopeRange::Node { start } => (&*start, &*start),
-                        ScopeRange::ErrorPath => todo!(),
-                        ScopeRange::Error => todo!(),
-                    };
-
-                    if node_start < *range_start || node_start >= *range_end {
-                        hide_row = true;
-                    }
-                    if node_start >= *range_end {
-                        pop = true;
-                        if !ranges.is_empty() {
-                            draw_extra_lf = true;
-                        }
-                        if let Some(range) = ranges.last() {
-                            let range_start = match range {
-                                ScopeRange::Range { start, .. } => start,
-                                ScopeRange::Node { start } => start,
-                                ScopeRange::ErrorPath => todo!(),
-                                ScopeRange::Error => todo!(),
-                            };
-
-                            if node_start < *range_start {
-                                hide_row = true;
+                                if node_start < *range_start {
+                                    hide_row = true;
+                                }
                             }
                         }
                     }
                 }
-            }
-            if pop {
-                ranges.pop();
+                if pop {
+                    ranges.pop();
+                }
             }
         }
 
