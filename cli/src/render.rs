@@ -413,6 +413,7 @@ pub struct CstRenderer<'a, W: Write> {
     original_nodes: &'a Option<HashSet<usize>>,
     changed_ranges: &'a Option<Vec<Range>>,
     limit_ranges: Option<Vec<ScopeRange>>,
+    range_check: NodeRangeCheck,
     flags: &'a CstFlags,
     encoding: Encoding,
     buf: String,
@@ -432,6 +433,7 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             original_nodes: &None,
             changed_ranges: &None,
             limit_ranges: None,
+            range_check: NodeRangeCheck::new(),
             flags,
             encoding: Encoding::UTF8,
             buf: String::with_capacity(1024),
@@ -534,11 +536,11 @@ impl<W: Write> Visitor for CstRenderer<'_, W> {
         let node = context.node();
         if node.is_named() || self.show_all() {
             if !context.traversed() {
-                let check = NodeRangeCheck::check(&mut self.limit_ranges, &node)?;
-                if check.draw_extra_lf {
+                self.range_check.check(&mut self.limit_ranges, &node)?;
+                if self.range_check.draw_extra_lf {
                     self.lf()?;
                 }
-                if check.hide_row {
+                if self.range_check.hide_row {
                     return Ok(());
                 }
 
@@ -554,19 +556,32 @@ impl<W: Write> Visitor for CstRenderer<'_, W> {
 pub struct NodeRangeCheck {
     pub hide_row: bool,
     pub draw_extra_lf: bool,
+    context: Option<Range>,
 }
 
 impl NodeRangeCheck {
+    pub fn new() -> Self {
+        Self {
+            hide_row: false,
+            draw_extra_lf: false,
+            context: None,
+        }
+    }
+
+    // Implement a range display logic
     #[inline(always)]
-    pub fn check(limit_ranges: &mut Option<Vec<ScopeRange>>, node: &Node) -> anyhow::Result<Self> {
-        // Implement a range display logic
+    pub fn check(
+        &mut self,
+        limit_ranges: &mut Option<Vec<ScopeRange>>,
+        node: &Node,
+    ) -> anyhow::Result<()> {
         let mut pop = false;
-        let mut hide_row = false;
-        let mut draw_extra_lf = false;
+        self.hide_row = false;
+        self.draw_extra_lf = false;
         'b: {
             if let Some(ranges) = limit_ranges {
                 if ranges.is_empty() {
-                    hide_row = true;
+                    self.hide_row = true;
                 } else {
                     let node_start = node.start_position();
                     // dbg!(&ranges, &tail_one);
@@ -585,33 +600,61 @@ impl NodeRangeCheck {
                             ScopeRange::Node { start } => (&*start, &*start),
                             ScopeRange::ChangePath => {
                                 if !node.has_changes() {
-                                    hide_row = true;
+                                    self.hide_row = true;
                                 }
                                 break 'b;
                             }
-                            ScopeRange::ErrorPath => todo!(),
-                            ScopeRange::Error => todo!(),
+                            ScopeRange::ErrorPath => {
+                                if node.is_error() {
+                                    self.context.replace(node.range());
+                                }
+                                if let Some(range) = self.context {
+                                    if !(node.start_byte() >= range.start_byte
+                                        && node.end_byte() <= range.end_byte)
+                                    {
+                                        self.context = None;
+                                        self.hide_row = true;
+                                    }
+                                } else if !node.has_error() {
+                                    self.hide_row = true;
+                                }
+                                break 'b;
+                            }
+                            ScopeRange::Error => {
+                                if node.is_error() {
+                                    self.context.replace(node.range());
+                                }
+                                if let Some(range) = self.context {
+                                    if !(node.start_byte() >= range.start_byte
+                                        && node.end_byte() <= range.end_byte)
+                                    {
+                                        self.context = None;
+                                        self.hide_row = true;
+                                    }
+                                } else {
+                                    self.hide_row = true;
+                                }
+                                break 'b;
+                            }
                         };
 
                         if node_start < *range_start || node_start >= *range_end {
-                            hide_row = true;
+                            self.hide_row = true;
                         }
                         if node_start >= *range_end {
                             pop = true;
                             if !ranges.is_empty() {
-                                draw_extra_lf = true;
+                                self.draw_extra_lf = true;
                             }
                             if let Some(range) = ranges.last() {
                                 let range_start = match range {
                                     ScopeRange::Range { start, .. } => start,
                                     ScopeRange::Node { start } => start,
-                                    ScopeRange::ChangePath => todo!(),
-                                    ScopeRange::ErrorPath => todo!(),
-                                    ScopeRange::Error => todo!(),
+                                    _ => unreachable!(),
                                 };
 
                                 if node_start < *range_start {
-                                    hide_row = true;
+                                    self.hide_row = true;
                                 }
                             }
                         }
@@ -623,10 +666,7 @@ impl NodeRangeCheck {
             }
         }
 
-        Ok(Self {
-            hide_row,
-            draw_extra_lf,
-        })
+        Ok(())
     }
 
     pub fn check_parent_scoped(
@@ -676,7 +716,9 @@ impl NodeRangeCheck {
                 };
             }
         }
-        Self::check(limit_ranges, node)
+        let mut this = Self::new();
+        this.check(limit_ranges, node)?;
+        Ok(this)
     }
 }
 
