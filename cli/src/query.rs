@@ -105,7 +105,7 @@ pub fn query_files_at_paths(
         });
         let (tree, (rows_count, max_col_len)) = scope;
         let pos_align = format!("{rows_count}:{max_col_len} - {rows_count}:{max_col_len}");
-        eprintln!("{pos_align} - alignment pattern");
+        // eprintln!("{pos_align} - alignment pattern");
         let pos_align = pos_align.len() + 1;
         let pat_align = format!("{}", query.pattern_count()).len();
         let cap_align = format!("{}", query.capture_names().len()).len();
