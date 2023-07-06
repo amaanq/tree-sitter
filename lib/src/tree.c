@@ -16,20 +16,17 @@ TSTree *ts_tree_new(
   result->included_ranges = ts_calloc(included_range_count, sizeof(TSRange));
   memcpy(result->included_ranges, included_ranges, included_range_count * sizeof(TSRange));
   result->included_range_count = included_range_count;
-  printf("tree new    %lx %d %lx\n", (unsigned long) result->root.ptr, result->root.ptr->ref_count, (unsigned long) result);
   return result;
 }
 
 TSTree *ts_tree_copy(const TSTree *self) {
   ts_subtree_retain(self->root);
-  void* tree = ts_tree_new(self->root, self->language, self->included_ranges, self->included_range_count);
-  printf("tree clone  %lx %d %lx -> %lx\n", (unsigned long) self->root.ptr, self->root.ptr->ref_count, (unsigned long) self, (unsigned long) tree);
-  return tree;
+  return ts_tree_new(self->root, self->language, self->included_ranges, self->included_range_count);
 }
 
 void ts_tree_delete(TSTree *self) {
   if (!self) return;
-  printf("tree delete %lx %d %lx\n", (unsigned long) self->root.ptr, self->root.ptr->ref_count, (unsigned long) self);
+
   SubtreePool pool = ts_subtree_pool_new(0);
   ts_subtree_release(&pool, self->root);
   ts_subtree_pool_delete(&pool);
