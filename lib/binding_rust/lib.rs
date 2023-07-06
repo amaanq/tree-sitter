@@ -165,10 +165,10 @@ pub struct QueryPredicate {
 
 /// A match of a `Query` to a particular set of `Node`s.
 pub struct QueryMatch<'cursor, 'tree> {
+    ptr: *mut ffi::TSQueryCursor,
     pub pattern_index: usize,
     pub captures: &'cursor [QueryCapture<'tree>],
     id: u32,
-    cursor: *mut ffi::TSQueryCursor,
 }
 
 /// A sequence of `QueryMatch`es associated with a given `QueryCursor`.
@@ -244,6 +244,7 @@ enum TextPredicate {
 
 // TODO: Remove this struct at at some point. If `core::str::lossy::Utf8Lossy`
 // is ever stabilized.
+#[doc(hidden)]
 pub struct LossyUtf8<'a> {
     bytes: &'a [u8],
     in_replacement: bool,
@@ -2047,7 +2048,7 @@ impl<'a, 'tree> QueryMatch<'a, 'tree> {
 
     #[doc(alias = "ts_query_cursor_remove_match")]
     pub fn remove(self) {
-        unsafe { ffi::ts_query_cursor_remove_match(self.cursor, self.id) }
+        unsafe { ffi::ts_query_cursor_remove_match(self.ptr, self.id) }
     }
 
     pub fn nodes_for_capture_index(
@@ -2065,7 +2066,7 @@ impl<'a, 'tree> QueryMatch<'a, 'tree> {
 
     fn new(m: ffi::TSQueryMatch, cursor: *mut ffi::TSQueryCursor) -> Self {
         QueryMatch {
-            cursor,
+            ptr: cursor,
             id: m.id,
             pattern_index: m.pattern_index as usize,
             captures: if m.capture_count > 0 {

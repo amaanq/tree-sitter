@@ -189,7 +189,7 @@ const TSLanguage *ts_parser_language(const TSParser *self);
  * If `length` is zero, then the entire document will be parsed. Otherwise,
  * the given ranges must be ordered from earliest to latest in the document,
  * and they must not overlap. That is, the following must hold for all
- * `i` < `length - 1`: ranges[i].end_byte <= ranges[i + 1].start_byte
+ * `i < length - 1`: `ranges[i].end_byte <= ranges[i + 1].start_byte`
  *
  * If this requirement is not satisfied, the operation will fail, the ranges
  * will not be assigned, and this function will return `false`. On success,
@@ -555,15 +555,23 @@ TSNode ts_node_child_by_field_name(
 TSNode ts_node_child_by_field_id(TSNode, TSFieldId);
 
 /**
- * Get the node's next / previous sibling.
+ * Get the node's _next_ sibling.
  */
 TSNode ts_node_next_sibling(TSNode);
+
+/**
+ * Get the node's _previous_ sibling.
+ */
 TSNode ts_node_prev_sibling(TSNode);
 
 /**
- * Get the node's next / previous *named* sibling.
+ * Get the node's _next_ *named* sibling.
  */
 TSNode ts_node_next_named_sibling(TSNode);
+
+/**
+ * Get the node's _previous_ *named* sibling.
+ */
 TSNode ts_node_prev_named_sibling(TSNode);
 
 /**
@@ -577,17 +585,26 @@ TSNode ts_node_first_child_for_byte(TSNode, uint32_t);
 TSNode ts_node_first_named_child_for_byte(TSNode, uint32_t);
 
 /**
- * Get the smallest node within this node that spans the given range of bytes
- * or (row, column) positions.
+ * Get the smallest node within this node that spans the given range of bytes.
  */
 TSNode ts_node_descendant_for_byte_range(TSNode, uint32_t, uint32_t);
+
+/**
+ * Get the smallest node within this node that spans the given
+ * (row, column) position.
+ */
 TSNode ts_node_descendant_for_point_range(TSNode, TSPoint, TSPoint);
 
 /**
- * Get the smallest named node within this node that spans the given range of
- * bytes or (row, column) positions.
+ * Get the smallest named node within this node that spans the given
+ * range of bytes.
  */
 TSNode ts_node_named_descendant_for_byte_range(TSNode, uint32_t, uint32_t);
+
+/**
+ * Get the smallest named node within this node that spans the given
+ * (row, column) position.
+ */
 TSNode ts_node_named_descendant_for_point_range(TSNode, TSPoint, TSPoint);
 
 /**
@@ -676,14 +693,25 @@ bool ts_tree_cursor_goto_first_child(TSTreeCursor *);
 
 /**
  * Move the cursor to the first child of its current node that extends beyond
- * the given byte offset or point.
+ * the given byte offset.
  *
  * This returns the index of the child node if one was found, and returns -1
  * if no such child was found.
  */
 int64_t ts_tree_cursor_goto_first_child_for_byte(TSTreeCursor *, uint32_t);
+
+/**
+ * Move the cursor to the first child of its current node that extends beyond
+ * the given point.
+ *
+ * This returns the index of the child node if one was found, and returns -1
+ * if no such child was found.
+ */
 int64_t ts_tree_cursor_goto_first_child_for_point(TSTreeCursor *, TSPoint);
 
+/**
+ *  Clone cursor to a new copy with saving its state.
+ */
 TSTreeCursor ts_tree_cursor_copy(const TSTreeCursor *);
 
 /*******************/
@@ -715,10 +743,18 @@ TSQuery *ts_query_new(
 void ts_query_delete(TSQuery *);
 
 /**
- * Get the number of patterns, captures, or string literals in the query.
+ * Get the number of _patterns_ in the query.
  */
 uint32_t ts_query_pattern_count(const TSQuery *);
+
+/**
+ * Get the number of _captures_ in the query.
+ */
 uint32_t ts_query_capture_count(const TSQuery *);
+
+/**
+ * Get the number of _string literals_ in the query.
+ */
 uint32_t ts_query_string_count(const TSQuery *);
 
 /**
@@ -793,6 +829,9 @@ TSQuantifier ts_query_capture_quantifier_for_id(
   uint32_t capture_id
 );
 
+/**
+ * Get the string value and length of one of the query's _string literals_ by id.
+ */
 const char *ts_query_string_value_for_id(
   const TSQuery *,
   uint32_t id,
@@ -862,14 +901,25 @@ void ts_query_cursor_exec(TSQueryCursor *, const TSQuery *, TSNode);
  * needed as the query is executed.
  */
 bool ts_query_cursor_did_exceed_match_limit(const TSQueryCursor *);
+
+/**
+ * Get the maximum number of allowed matches.
+ */
 uint32_t ts_query_cursor_match_limit(const TSQueryCursor *);
+
+/**
+ * Set the maximum number of allowed matches.
+ */
 void ts_query_cursor_set_match_limit(TSQueryCursor *, uint32_t);
 
 /**
- * Set the range of bytes or (row, column) positions in which the query
- * will be executed.
+ * Set the range of bytes in which the query will be executed.
  */
 void ts_query_cursor_set_byte_range(TSQueryCursor *, uint32_t, uint32_t);
+
+/**
+ * Set the (row, column) position in which the query will be executed.
+ */
 void ts_query_cursor_set_point_range(TSQueryCursor *, TSPoint, TSPoint);
 
 /**
@@ -879,6 +929,10 @@ void ts_query_cursor_set_point_range(TSQueryCursor *, TSPoint, TSPoint);
  * Otherwise, return `false`.
  */
 bool ts_query_cursor_next_match(TSQueryCursor *, TSQueryMatch *match);
+
+/**
+ * Exclude the match from been captured by using a pattern id.
+ */
 void ts_query_cursor_remove_match(TSQueryCursor *, uint32_t id);
 
 /**
@@ -969,10 +1023,10 @@ uint32_t ts_language_version(const TSLanguage *);
  * By default, Tree-sitter uses the standard libc allocation functions,
  * but aborts the process when an allocation fails. This function lets
  * you supply alternative allocation functions at runtime.
- * 
+ *
  * If you pass `NULL` for any parameter, Tree-sitter will switch back to
  * its default implementation of that function.
- * 
+ *
  * If you call this function after the library has already been used, then
  * you must ensure that either:
  *  1. All the existing objects have been freed.

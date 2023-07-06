@@ -157,7 +157,7 @@ extern "C" {
     pub fn ts_parser_language(self_: *const TSParser) -> *const TSLanguage;
 }
 extern "C" {
-    #[doc = " Set the ranges of text that the parser should include when parsing.\n\n By default, the parser will always include entire documents. This function\n allows you to parse only a *portion* of a document but still return a syntax\n tree whose ranges match up with the document as a whole. You can also pass\n multiple disjoint ranges.\n\n The second and third parameters specify the location and length of an array\n of ranges. The parser does *not* take ownership of these ranges; it copies\n the data, so it doesn't matter how these ranges are allocated.\n\n If `length` is zero, then the entire document will be parsed. Otherwise,\n the given ranges must be ordered from earliest to latest in the document,\n and they must not overlap. That is, the following must hold for all\n `i` < `length - 1`: ranges[i].end_byte <= ranges[i + 1].start_byte\n\n If this requirement is not satisfied, the operation will fail, the ranges\n will not be assigned, and this function will return `false`. On success,\n this function returns `true`"]
+    #[doc = " Set the ranges of text that the parser should include when parsing.\n\n By default, the parser will always include entire documents. This function\n allows you to parse only a *portion* of a document but still return a syntax\n tree whose ranges match up with the document as a whole. You can also pass\n multiple disjoint ranges.\n\n The second and third parameters specify the location and length of an array\n of ranges. The parser does *not* take ownership of these ranges; it copies\n the data, so it doesn't matter how these ranges are allocated.\n\n If `length` is zero, then the entire document will be parsed. Otherwise,\n the given ranges must be ordered from earliest to latest in the document,\n and they must not overlap. That is, the following must hold for all\n `i < length - 1`: `ranges[i].end_byte <= ranges[i + 1].start_byte`\n\n If this requirement is not satisfied, the operation will fail, the ranges\n will not be assigned, and this function will return `false`. On success,\n this function returns `true`"]
     pub fn ts_parser_set_included_ranges(
         self_: *mut TSParser,
         ranges: *const TSRange,
@@ -360,17 +360,19 @@ extern "C" {
     pub fn ts_node_child_by_field_id(arg1: TSNode, arg2: TSFieldId) -> TSNode;
 }
 extern "C" {
-    #[doc = " Get the node's next / previous sibling."]
+    #[doc = " Get the node's _next_ sibling."]
     pub fn ts_node_next_sibling(arg1: TSNode) -> TSNode;
 }
 extern "C" {
+    #[doc = " Get the node's _previous_ sibling."]
     pub fn ts_node_prev_sibling(arg1: TSNode) -> TSNode;
 }
 extern "C" {
-    #[doc = " Get the node's next / previous *named* sibling."]
+    #[doc = " Get the node's _next_ *named* sibling."]
     pub fn ts_node_next_named_sibling(arg1: TSNode) -> TSNode;
 }
 extern "C" {
+    #[doc = " Get the node's _previous_ *named* sibling."]
     pub fn ts_node_prev_named_sibling(arg1: TSNode) -> TSNode;
 }
 extern "C" {
@@ -382,18 +384,20 @@ extern "C" {
     pub fn ts_node_first_named_child_for_byte(arg1: TSNode, arg2: u32) -> TSNode;
 }
 extern "C" {
-    #[doc = " Get the smallest node within this node that spans the given range of bytes\n or (row, column) positions."]
+    #[doc = " Get the smallest node within this node that spans the given range of bytes."]
     pub fn ts_node_descendant_for_byte_range(arg1: TSNode, arg2: u32, arg3: u32) -> TSNode;
 }
 extern "C" {
+    #[doc = " Get the smallest node within this node that spans the given\n (row, column) position."]
     pub fn ts_node_descendant_for_point_range(arg1: TSNode, arg2: TSPoint, arg3: TSPoint)
         -> TSNode;
 }
 extern "C" {
-    #[doc = " Get the smallest named node within this node that spans the given range of\n bytes or (row, column) positions."]
+    #[doc = " Get the smallest named node within this node that spans the given\n range of bytes."]
     pub fn ts_node_named_descendant_for_byte_range(arg1: TSNode, arg2: u32, arg3: u32) -> TSNode;
 }
 extern "C" {
+    #[doc = " Get the smallest named node within this node that spans the given\n (row, column) position."]
     pub fn ts_node_named_descendant_for_point_range(
         arg1: TSNode,
         arg2: TSPoint,
@@ -447,14 +451,16 @@ extern "C" {
     pub fn ts_tree_cursor_goto_first_child(arg1: *mut TSTreeCursor) -> bool;
 }
 extern "C" {
-    #[doc = " Move the cursor to the first child of its current node that extends beyond\n the given byte offset or point.\n\n This returns the index of the child node if one was found, and returns -1\n if no such child was found."]
+    #[doc = " Move the cursor to the first child of its current node that extends beyond\n the given byte offset.\n\n This returns the index of the child node if one was found, and returns -1\n if no such child was found."]
     pub fn ts_tree_cursor_goto_first_child_for_byte(arg1: *mut TSTreeCursor, arg2: u32) -> i64;
 }
 extern "C" {
+    #[doc = " Move the cursor to the first child of its current node that extends beyond\n the given point.\n\n This returns the index of the child node if one was found, and returns -1\n if no such child was found."]
     pub fn ts_tree_cursor_goto_first_child_for_point(arg1: *mut TSTreeCursor, arg2: TSPoint)
         -> i64;
 }
 extern "C" {
+    #[doc = "  Clone cursor to a new copy with saving its state."]
     pub fn ts_tree_cursor_copy(arg1: *const TSTreeCursor) -> TSTreeCursor;
 }
 extern "C" {
@@ -472,13 +478,15 @@ extern "C" {
     pub fn ts_query_delete(arg1: *mut TSQuery);
 }
 extern "C" {
-    #[doc = " Get the number of patterns, captures, or string literals in the query."]
+    #[doc = " Get the number of _patterns_ in the query."]
     pub fn ts_query_pattern_count(arg1: *const TSQuery) -> u32;
 }
 extern "C" {
+    #[doc = " Get the number of _captures_ in the query."]
     pub fn ts_query_capture_count(arg1: *const TSQuery) -> u32;
 }
 extern "C" {
+    #[doc = " Get the number of _string literals_ in the query."]
     pub fn ts_query_string_count(arg1: *const TSQuery) -> u32;
 }
 extern "C" {
@@ -519,6 +527,7 @@ extern "C" {
     ) -> TSQuantifier;
 }
 extern "C" {
+    #[doc = " Get the string value and length of one of the query's _string literals_ by id."]
     pub fn ts_query_string_value_for_id(
         arg1: *const TSQuery,
         id: u32,
@@ -554,16 +563,19 @@ extern "C" {
     pub fn ts_query_cursor_did_exceed_match_limit(arg1: *const TSQueryCursor) -> bool;
 }
 extern "C" {
+    #[doc = " Get the maximum number of allowed matches."]
     pub fn ts_query_cursor_match_limit(arg1: *const TSQueryCursor) -> u32;
 }
 extern "C" {
+    #[doc = " Set the maximum number of allowed matches."]
     pub fn ts_query_cursor_set_match_limit(arg1: *mut TSQueryCursor, arg2: u32);
 }
 extern "C" {
-    #[doc = " Set the range of bytes or (row, column) positions in which the query\n will be executed."]
+    #[doc = " Set the range of bytes in which the query will be executed."]
     pub fn ts_query_cursor_set_byte_range(arg1: *mut TSQueryCursor, arg2: u32, arg3: u32);
 }
 extern "C" {
+    #[doc = " Set the (row, column) position in which the query will be executed."]
     pub fn ts_query_cursor_set_point_range(arg1: *mut TSQueryCursor, arg2: TSPoint, arg3: TSPoint);
 }
 extern "C" {
@@ -571,6 +583,7 @@ extern "C" {
     pub fn ts_query_cursor_next_match(arg1: *mut TSQueryCursor, match_: *mut TSQueryMatch) -> bool;
 }
 extern "C" {
+    #[doc = " Exclude the match from been captured by using a pattern id."]
     pub fn ts_query_cursor_remove_match(arg1: *mut TSQueryCursor, id: u32);
 }
 extern "C" {

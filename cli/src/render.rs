@@ -410,6 +410,8 @@ pub struct CstRenderer<'a, W: Write> {
     indent_level: usize,
     indent_shift: usize,
     last_line_no: usize,
+    bytes_align: usize,
+    pos_align: usize,
     original_nodes: &'a Option<HashSet<usize>>,
     changed_ranges: &'a Option<Vec<Range>>,
     limit_ranges: Option<Vec<ScopeRange>>,
@@ -429,6 +431,8 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             indent_base: 0,
             indent_level: 0,
             indent_shift: 0,
+            bytes_align: 0,
+            pos_align: 0,
             last_line_no: usize::MAX,
             original_nodes: &None,
             changed_ranges: &None,
@@ -457,6 +461,12 @@ impl<'a, W: Write> CstRenderer<'a, W> {
 
     pub fn limit_ranges(mut self, ranges: &'a Option<Vec<ScopeRange>>) -> Self {
         self.limit_ranges = ranges.clone();
+        self
+    }
+
+    pub fn source_counts(mut self, bytes_count: usize, lines_count: usize) -> Self {
+        self.bytes_align = format!("{bytes_count}:{bytes_count}").len() + 1;
+        self.pos_align = format!("{lines_count}:xxx - {lines_count}:xxx").len();
         self
     }
 }
@@ -827,9 +837,8 @@ impl<'a, W: Write> CstRenderer<'a, W> {
     }
 
     #[inline(always)]
-    fn node(&mut self, context: &Context) -> Result {
-        let node = context.node();
-        let node_color = if node.is_error() {
+    fn select_node_color(&self, node: &Node) -> Style {
+        if node.is_error() {
             self.color.error
         } else if node.is_extra() {
             self.color.extra
@@ -837,12 +846,18 @@ impl<'a, W: Write> CstRenderer<'a, W> {
             self.color.nonterm
         } else {
             self.color.term
-        };
+        }
+    }
+
+    #[inline(always)]
+    fn node(&mut self, context: &Context) -> Result {
+        let node = context.node();
+        let node_color = self.select_node_color(&node);
         if node.is_missing() {
             self.write_colored("MISSING: ", self.color.missing)?;
         }
         if let Some(field_name) = context.field_name() {
-            write!(self.stdout, "{}: ", self.color.field.paint(field_name),)?;
+            write!(self.stdout, "{}: ", self.color.field.paint(field_name))?;
         }
         if node.is_named() {
             self.write_colored(node.kind(), node_color)?;
@@ -898,11 +913,9 @@ impl<'a, W: Write> CstRenderer<'a, W> {
                             pos.clear();
                             let mut p = self.indent_base;
                             if self.flags.show_positions {
-                                let col = if multiline {
-                                    0
-                                } else {
-                                    node.start_position().column
-                                };
+                                let col = multiline
+                                    .then_some(0)
+                                    .unwrap_or_else(|| node.start_position().column);
                                 write!(&mut pos, "{}:{:<2} - {}:{}", row, col, row, v.len())?;
                                 p -= pos.len();
                             };
