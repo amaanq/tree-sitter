@@ -162,6 +162,7 @@ jobs:
     - name: Build custom cross image
       if: ${{ matrix.use-cross && matrix.os == 'ubuntu-latest' }}
       run: |
+        set -x
         cd ..
 
         target="${{ matrix.target }}"
@@ -185,6 +186,7 @@ jobs:
         CC: ${{ matrix.cc }}
         AR: ${{ matrix.ar }}
       run: |
+        set -x
         PATH="$PWD/.github/scripts:$PATH"
         echo "$PWD/.github/scripts" >> $GITHUB_PATH
 
