@@ -25,11 +25,23 @@ const matrix = {
         'x64': { name: 'x64' },
         'x86': { name: 'x86' },
         'i586': { name: 'i586' },
+        'mips': { name: 'mips' },
+        'mips64': { name: 'mips64' },
         'mipsel': { name: 'mipsel' },
         'mips64el': { name: 'mips64el' },
-        'ppc64el': { name: 'ppc64el' },
+        'ppc': { name: 'powerpc' },
+        'ppc64': { name: 'powerpc64' },
+        'ppc64el': { name: 'powerpc64el' },
         'riscv64gc': { name: 'riscv64gc' },
+        's390x': { name: 's390x' },
+        'sparc64': { name: 'sparc64' },
       }
+    },
+    'solaris': {
+      name: 'solaris',
+      arch: {
+        'sparcv9': { name: 'sparcv9' },
+      },
     },
     'win32': {
       name: 'windows',
