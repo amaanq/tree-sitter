@@ -437,17 +437,55 @@ impl Loader {
             }
         }
 
-        let library = unsafe { Library::new(&library_path) }
-            .with_context(|| format!("Error opening dynamic library {:?}", &library_path))?;
-        let language_fn_name = format!("tree_sitter_{}", replace_dashes_with_underscores(name));
-        let language = unsafe {
-            let language_fn: Symbol<unsafe extern "C" fn() -> Language> = library
-                .get(language_fn_name.as_bytes())
-                .with_context(|| format!("Failed to load symbol {}", language_fn_name))?;
-            language_fn()
-        };
-        mem::forget(library);
-        Ok(language)
+        #[cfg(not(target_env = "musl"))]
+        {
+            let library = unsafe { Library::new(&library_path) }.unwrap();
+            // .with_context(|| format!("Error opening dynamic library {:?}", &library_path))?;
+            let language_fn_name = format!("tree_sitter_{}", replace_dashes_with_underscores(name));
+            let language = unsafe {
+                let language_fn: Symbol<unsafe extern "C" fn() -> Language> = library
+                    .get(language_fn_name.as_bytes())
+                    .with_context(|| format!("Failed to load symbol {}", language_fn_name))?;
+                language_fn()
+            };
+
+            mem::forget(library);
+            Ok(language)
+        }
+
+        #[cfg(target_env = "musl")]
+        {
+            let parser_map: [(&str, fn() -> tree_sitter::Language); 15] = [
+                ("bash", || tree_sitter_bash::language()),
+                ("c", || tree_sitter_c::language()),
+                ("cpp", || tree_sitter_cpp::language()),
+                ("embedded-template", || {
+                    tree_sitter_embedded_template::language()
+                }),
+                ("go", || tree_sitter_go::language()),
+                ("html", || tree_sitter_html::language()),
+                ("java", || tree_sitter_java::language()),
+                ("javascript", || tree_sitter_javascript::language()),
+                ("jsdoc", || tree_sitter_jsdoc::language()),
+                ("json", || tree_sitter_json::language()),
+                ("php", || tree_sitter_php::language()),
+                ("python", || tree_sitter_python::language()),
+                ("ruby", || tree_sitter_ruby::language()),
+                ("rust", || tree_sitter_rust::language()),
+                ("typescript", || {
+                    tree_sitter_typescript::language_typescript()
+                }),
+            ];
+            if let Some(parser_fn) = parser_map
+                .iter()
+                .find(|(lang, _)| *lang == name)
+                .map(|(_, fn_ptr)| fn_ptr)
+            {
+                Ok(parser_fn())
+            } else {
+                Err(anyhow!("Unsupported language: {}", name).into())
+            }
+        }
     }
 
     pub fn highlight_config_for_injection_string<'a>(

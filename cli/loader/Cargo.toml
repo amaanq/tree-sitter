@@ -35,3 +35,20 @@ path = "../../highlight"
 [dependencies.tree-sitter-tags]
 version = "0.20"
 path = "../../tags"
+
+[target.'cfg(target_env = "musl")'.dependencies]
+tree-sitter-bash = { path = "../../test/fixtures/grammars/bash/" }
+tree-sitter-c = { path = "../../test/fixtures/grammars/c/" }
+tree-sitter-cpp = { path = "../../test/fixtures/grammars/cpp/" }
+tree-sitter-embedded-template = { path = "../../test/fixtures/grammars/embedded-template/" }
+tree-sitter-go = { path = "../../test/fixtures/grammars/go/" }
+tree-sitter-html = { path = "../../test/fixtures/grammars/html/" }
+tree-sitter-java = { path = "../../test/fixtures/grammars/java/" }
+tree-sitter-javascript = { path = "../../test/fixtures/grammars/javascript/" }
+tree-sitter-jsdoc = { path = "../../test/fixtures/grammars/jsdoc/" }
+tree-sitter-json = { path = "../../test/fixtures/grammars/json/" }
+tree-sitter-php = { path = "../../test/fixtures/grammars/php/" }
+tree-sitter-python = { path = "../../test/fixtures/grammars/python/" }
+tree-sitter-ruby = { path = "../../test/fixtures/grammars/ruby/" }
+tree-sitter-rust = { path = "../../test/fixtures/grammars/rust/" }
+tree-sitter-typescript = { path = "../../test/fixtures/grammars/typescript/" }
