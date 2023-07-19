@@ -13,6 +13,8 @@ pub(super) fn extract_tokens(
         current_variable_token_count: 0,
         extracted_variables: Vec::new(),
         extracted_usage_counts: Vec::new(),
+        extra_symbols: grammar.extra_symbols.clone(),
+        variables: grammar.variables.clone(),
     };
 
     for mut variable in grammar.variables.iter_mut() {
@@ -24,6 +26,7 @@ pub(super) fn extract_tokens(
     }
 
     let mut lexical_variables = Vec::with_capacity(extractor.extracted_variables.len());
+    println!("extractor: {:#?}", extractor);
     for variable in extractor.extracted_variables {
         lexical_variables.push(Variable {
             name: variable.name,
@@ -34,8 +37,7 @@ pub(super) fn extract_tokens(
 
     // If a variable's entire rule was extracted as a token and that token didn't
     // appear within any other rule, then remove that variable from the syntax
-    // grammar, giving its name to the token in the lexical grammar. Any symbols
-    // that pointed to that variable will need to be updated to point to the
+
     // variable in the lexical grammar. Symbols that pointed to later variables
     // will need to have their indices decremented.
     let mut variables = Vec::new();
@@ -164,11 +166,14 @@ pub(super) fn extract_tokens(
     ))
 }
 
+#[derive(Debug)]
 struct TokenExtractor {
     current_variable_name: String,
     current_variable_token_count: usize,
     extracted_variables: Vec<Variable>,
     extracted_usage_counts: Vec<usize>,
+    extra_symbols: Vec<Rule>,
+    variables: Vec<Variable>,
 }
 
 struct SymbolReplacer {
@@ -176,13 +181,59 @@ struct SymbolReplacer {
 }
 
 impl TokenExtractor {
+    fn rule_used_in_extras_rule(&self, rule: &Rule) -> bool {
+        println!("rule={:?}", rule);
+        for r in &self.extra_symbols {
+            if self.check_rule_in_extras(r, rule) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn check_rule_in_extras(&self, current_rule: &Rule, target_rule: &Rule) -> bool {
+        println!(
+            "current_rule={:#?} target_rule={:#?}",
+            current_rule, target_rule
+        );
+        match current_rule {
+            Rule::Blank => false,
+            Rule::Symbol(s) => {
+                let next_rule = &self.variables[s.index].rule;
+                self.check_rule_in_extras(next_rule, target_rule)
+            }
+            Rule::String(s) | Rule::Pattern(s) | Rule::NamedSymbol(s) => {
+                if let Rule::String(s2) | Rule::Pattern(s2) | Rule::NamedSymbol(s2) = target_rule {
+                    s.as_str() == s2.as_str()
+                } else {
+                    false
+                }
+            }
+            Rule::Choice(rules) | Rule::Seq(rules) => {
+                for rule in rules {
+                    if self.check_rule_in_extras(rule, target_rule) {
+                        return true;
+                    }
+                }
+                false
+            }
+            Rule::Repeat(inner) | Rule::Metadata { rule: inner, .. } => {
+                self.check_rule_in_extras(inner, target_rule)
+            }
+        }
+    }
+
     fn extract_tokens_in_variable(&mut self, variable: &mut Variable) {
         self.current_variable_name.clear();
         self.current_variable_name.push_str(&variable.name);
         self.current_variable_token_count = 0;
         let mut rule = Rule::Blank;
         mem::swap(&mut rule, &mut variable.rule);
-        variable.rule = self.extract_tokens_in_rule(&rule);
+        let res = !self.rule_used_in_extras_rule(&rule);
+        println!("RES={:?}", res);
+        if res {
+            variable.rule = self.extract_tokens_in_rule(&rule);
+        }
     }
 
     fn extract_tokens_in_rule(&mut self, input: &Rule) -> Rule {

@@ -26,6 +26,7 @@ use std::{
     mem,
 };
 
+#[derive(Debug)]
 pub(crate) struct IntermediateGrammar<T, U> {
     variables: Vec<Variable>,
     extra_symbols: Vec<T>,
@@ -75,7 +76,10 @@ pub(crate) fn prepare_grammar(
     validate_precedences(input_grammar)?;
 
     let interned_grammar = intern_symbols(input_grammar)?;
+    println!("input_grammar: {:#?}", input_grammar);
     let (syntax_grammar, lexical_grammar) = extract_tokens(interned_grammar)?;
+    println!("syntax_grammar: {:#?}", syntax_grammar);
+    println!("lexical_grammar: {:#?}", lexical_grammar);
     let syntax_grammar = expand_repeats(syntax_grammar);
     let mut syntax_grammar = flatten_grammar(syntax_grammar)?;
     let lexical_grammar = expand_tokens(lexical_grammar)?;
