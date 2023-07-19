@@ -829,10 +829,56 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d18dcb776d3affaba6db04d11d645946d34a69b3172e588af96ce9fecd20faac"
+dependencies = [
+ "cc",
+ "regex",
+]
+
+[[package]]
+name = "tree-sitter"
+version = "0.19.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad726ec26496bf4c083fff0f43d4eb3a2ad1bba305323af5ff91383c0b6ecac0"
+dependencies = [
+ "cc",
+ "regex",
+]
+
+[[package]]
+name = "tree-sitter"
 version = "0.20.10"
 dependencies = [
  "cc",
  "regex",
+]
+
+[[package]]
+name = "tree-sitter"
+version = "0.20.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e747b1f9b7b931ed39a548c1fae149101497de3c1fc8d9e18c62c1a66c683d3d"
+dependencies = [
+ "cc",
+ "regex",
+]
+
+[[package]]
+name = "tree-sitter-bash"
+version = "0.19.0"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "tree-sitter-c"
+version = "0.20.3"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -866,12 +912,27 @@ dependencies = [
  "tempfile",
  "tiny_http",
  "toml",
- "tree-sitter",
+ "tree-sitter 0.20.10",
+ "tree-sitter-bash",
+ "tree-sitter-c",
  "tree-sitter-config",
+ "tree-sitter-cpp",
+ "tree-sitter-embedded-template",
+ "tree-sitter-go",
  "tree-sitter-highlight",
+ "tree-sitter-html",
+ "tree-sitter-java",
+ "tree-sitter-javascript",
+ "tree-sitter-jsdoc",
+ "tree-sitter-json",
  "tree-sitter-loader",
+ "tree-sitter-php",
+ "tree-sitter-python",
+ "tree-sitter-ruby",
+ "tree-sitter-rust",
  "tree-sitter-tags",
  "tree-sitter-tests-proc-macro",
+ "tree-sitter-typescript",
  "unindent",
  "walkdir",
  "webbrowser",
@@ -889,13 +950,77 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-cpp"
+version = "0.20.0"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "tree-sitter-embedded-template"
+version = "0.20.0"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "tree-sitter-go"
+version = "0.19.1"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "tree-sitter-highlight"
 version = "0.20.2"
 dependencies = [
  "lazy_static",
  "regex",
  "thiserror",
- "tree-sitter",
+ "tree-sitter 0.20.10",
+]
+
+[[package]]
+name = "tree-sitter-html"
+version = "0.19.0"
+dependencies = [
+ "cc",
+ "tree-sitter 0.19.5",
+]
+
+[[package]]
+name = "tree-sitter-java"
+version = "0.20.0"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "tree-sitter-javascript"
+version = "0.16.0"
+dependencies = [
+ "cc",
+ "tree-sitter 0.17.1",
+]
+
+[[package]]
+name = "tree-sitter-jsdoc"
+version = "0.0.1"
+dependencies = [
+ "cc",
+ "tree-sitter 0.17.1",
+]
+
+[[package]]
+name = "tree-sitter-json"
+version = "0.20.0"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -910,9 +1035,41 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "tree-sitter",
+ "tree-sitter 0.20.10",
  "tree-sitter-highlight",
  "tree-sitter-tags",
+]
+
+[[package]]
+name = "tree-sitter-php"
+version = "0.19.1"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "tree-sitter-python"
+version = "0.20.2"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "tree-sitter-ruby"
+version = "0.20.0"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "tree-sitter-rust"
+version = "0.20.3"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -922,7 +1079,7 @@ dependencies = [
  "memchr",
  "regex",
  "thiserror",
- "tree-sitter",
+ "tree-sitter 0.20.10",
 ]
 
 [[package]]
@@ -933,6 +1090,14 @@ dependencies = [
  "quote",
  "rand",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "tree-sitter-typescript"
+version = "0.20.2"
+dependencies = [
+ "cc",
+ "tree-sitter 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

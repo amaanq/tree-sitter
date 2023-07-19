@@ -20,10 +20,51 @@ pub fn fixtures_dir<'a>() -> &'static Path {
     &FIXTURES_DIR
 }
 
+fn get_embedded_language(name: &str) -> Option<Language> {
+    macro_rules! L {
+        ($language: expr) => {
+            unsafe { std::mem::transmute($language) }
+        };
+    }
+
+    #[rustfmt::skip]
+    let language = match name {
+        "bash"              => L!(tree_sitter_bash::language()),
+        "c"                 => L!(tree_sitter_c::language()),
+        "cpp"               => L!(tree_sitter_cpp::language()),
+        "embedded-template" => L!(tree_sitter_embedded_template::language()),
+        "go"                => L!(tree_sitter_go::language()),
+        "html"              => L!(tree_sitter_html::language()),
+        "java"              => L!(tree_sitter_java::language()),
+        "javascript"        => L!(tree_sitter_javascript::language()),
+        "jsdoc"             => L!(tree_sitter_jsdoc::language()),
+        "json"              => L!(tree_sitter_json::language()),
+        "php"               => L!(tree_sitter_php::language()),
+        "python"            => L!(tree_sitter_python::language()),
+        "ruby"              => L!(tree_sitter_ruby::language()),
+        "rust"              => L!(tree_sitter_rust::language()),
+        "typescript"        => L!(tree_sitter_typescript::language_typescript()),
+        _ => return None,
+    };
+    Some(language)
+}
+
 pub fn get_language(name: &str) -> Language {
-    TEST_LOADER
-        .load_language_at_path(&GRAMMARS_DIR.join(name).join("src"), &HEADER_DIR)
-        .unwrap()
+    #[cfg(not(target_env = "musl"))]
+    {
+        TEST_LOADER
+            .load_language_at_path(&GRAMMARS_DIR.join(name).join("src"), &HEADER_DIR)
+            .unwrap()
+    }
+
+    #[cfg(target_env = "musl")]
+    {
+        if let Some(language) = get_embedded_language(name) {
+            language
+        } else {
+            panic!("Unsupported language: {}", name)
+        }
+    }
 }
 
 pub fn get_language_queries_path(language_name: &str) -> PathBuf {
