@@ -235,11 +235,53 @@ pub enum QueryErrorKind {
     Language,
 }
 
-#[derive(Debug)]
 enum TextPredicate {
     CaptureEqString(u32, String, bool),
     CaptureEqCapture(u32, u32, bool),
     CaptureMatchString(u32, regex::bytes::Regex, bool),
+    CaptureAnyString(u32, Vec<String>, bool),
+    // a vector of functions that are the predicate name, the capture id, and the predicate function
+    CaptureCustom(Vec<(String, u32, Box<dyn FnMut(&[u8]) -> bool>, bool)>),
+}
+
+impl std::fmt::Debug for TextPredicate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TextPredicate::CaptureEqString(capture_id, string, inverted) => f
+                .debug_struct("CaptureEqString")
+                .field("capture_id", capture_id)
+                .field("string", string)
+                .field("inverted", inverted)
+                .finish(),
+            TextPredicate::CaptureEqCapture(capture_id1, capture_id2, inverted) => f
+                .debug_struct("CaptureEqCapture")
+                .field("capture_id1", capture_id1)
+                .field("capture_id2", capture_id2)
+                .field("inverted", inverted)
+                .finish(),
+            TextPredicate::CaptureMatchString(capture_id, regex, inverted) => f
+                .debug_struct("CaptureMatchString")
+                .field("capture_id", capture_id)
+                .field("regex", regex)
+                .field("inverted", inverted)
+                .finish(),
+            TextPredicate::CaptureAnyString(capture_id, strings, inverted) => f
+                .debug_struct("CaptureAnyString")
+                .field("capture_id", capture_id)
+                .field("strings", strings)
+                .field("inverted", inverted)
+                .finish(),
+            TextPredicate::CaptureCustom(captures) => {
+                let mapped_captures = captures
+                    .iter()
+                    .map(|(name, capture_id, _, inverted)| (name, capture_id, inverted))
+                    .collect::<Vec<_>>();
+                f.debug_struct("CaptureCustom")
+                    .field("captures", &mapped_captures)
+                    .finish()
+            }
+        }
+    }
 }
 
 // TODO: Remove this struct at at some point. If `core::str::lossy::Utf8Lossy`
@@ -2073,6 +2115,29 @@ impl<'a, 'tree> QueryMatch<'a, 'tree> {
                         }
                         None => true,
                     }
+                }
+                TextPredicate::CaptureAnyString(i, v, is_positive) => {
+                    let node = self.nodes_for_capture_index(*i).next();
+                    match node {
+                        Some(node) => {
+                            let text = get_text(buffer1, text_provider.text(node));
+                            v.iter().any(|s| text == s.as_bytes()) == *is_positive
+                        }
+                        None => true,
+                    }
+                }
+                TextPredicate::CaptureCustom(custom_captures) => {
+                    let mut captures = Vec::new();
+                    for (i, j) in custom_captures {
+                        let node1 = self.nodes_for_capture_index(*i).next();
+                        let node2 = self.nodes_for_capture_index(*j).next();
+                        if let (Some(node1), Some(node2)) = (node1, node2) {
+                            let text1 = get_text(buffer1, text_provider.text(node1));
+                            let text2 = get_text(buffer2, text_provider.text(node2));
+                            captures.push((text1, text2));
+                        }
+                    }
+                    (query.custom_predicates[self.pattern_index])(&captures)
                 }
             })
     }
