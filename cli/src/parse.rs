@@ -182,7 +182,9 @@ pub fn parse_input(
             }
             let edited_tree = tree.clone();
             if apply_edits {
-                tree = parser.parse(&input.source_code, Some(&edited_tree)).unwrap();
+                tree = parser
+                    .parse(&input.source_code, Some(&edited_tree))
+                    .unwrap();
                 changed_ranges.replace(edited_tree.changed_ranges(&tree).collect());
             }
         }

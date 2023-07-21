@@ -308,6 +308,11 @@ fn run() -> Result<()> {
                             .short('H')
                             .action(ArgAction::SetTrue),
                     )
+                    .arg(
+                        Arg::new("check")
+                            .help("Check that highlighting captures conform strictly to standards")
+                            .long("check"),
+                    )
                     .arg(&scope_arg)
                     .arg(&time_arg)
                     .arg(&quiet_arg)
@@ -607,6 +612,7 @@ fn run() -> Result<()> {
             let time = matches.get_flag("time");
             let quiet = matches.get_flag("quiet");
             let html_mode = quiet || matches.get_flag("html");
+            let should_check = matches.get_flag("check");
             let paths = collect_paths(
                 matches.get_one_str("paths-file"),
                 matches.get_many_str("paths").map(IntoIterator::into_iter),
@@ -646,6 +652,25 @@ fn run() -> Result<()> {
                 };
 
                 if let Some(highlight_config) = language_config.highlight_config(language)? {
+                    if should_check {
+                        let names = highlight_config.nonconformant_capture_names();
+                        if names.is_empty() {
+                            eprintln!("All highlight captures conform to standards.");
+                        } else {
+                            eprintln!(
+                                "Non-standard highlight {} detected:",
+                                if names.len() > 1 {
+                                    "captures"
+                                } else {
+                                    "capture"
+                                }
+                            );
+                            for name in names {
+                                eprintln!("* {}", name);
+                            }
+                        }
+                    }
+
                     let source = fs::read(path)?;
                     if html_mode {
                         highlight::html(

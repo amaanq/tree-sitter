@@ -438,6 +438,11 @@ const char *ts_node_type(TSNode);
 TSSymbol ts_node_symbol(TSNode);
 
 /**
+ * Get the node's language.
+ */
+const TSLanguage *ts_node_language(TSNode);
+
+/**
  * Get the node's start byte.
  */
 uint32_t ts_node_start_byte(TSNode);
@@ -585,7 +590,13 @@ TSNode ts_node_first_child_for_byte(TSNode, uint32_t);
 TSNode ts_node_first_named_child_for_byte(TSNode, uint32_t);
 
 /**
- * Get the smallest node within this node that spans the given range of bytes.
+ * Get the node's number of descendants, including one for the node itself.
+ */
+uint32_t ts_node_descendant_count(TSNode);
+
+/**
+ * Get the smallest node within this node that spans the given range of bytes
+ * or (row, column) positions.
  */
 TSNode ts_node_descendant_for_byte_range(TSNode, uint32_t, uint32_t);
 
@@ -692,6 +703,25 @@ bool ts_tree_cursor_goto_next_sibling(TSTreeCursor *);
 bool ts_tree_cursor_goto_first_child(TSTreeCursor *);
 
 /**
+ * Move the cursor to the node that is the nth descendant of
+ * the original node that the cursor was constructed with, where
+ * zero represents the original node itself.
+ */
+void ts_tree_cursor_goto_descendant(TSTreeCursor *, uint32_t);
+
+/**
+ * Get the index of the cursor's current node out of all of the
+ * descendants of the original node that the cursor was constructed with.
+ */
+uint32_t ts_tree_cursor_current_descendant_index(const TSTreeCursor *);
+
+/**
+ * Get the depth of the cursor's current node relative to the original
+ * node that the cursor was constructed with.
+ */
+uint32_t ts_tree_cursor_current_depth(const TSTreeCursor *);
+
+/**
  * Move the cursor to the first child of its current node that extends beyond
  * the given byte offset.
  *
@@ -784,7 +814,7 @@ uint32_t ts_query_start_byte_for_pattern(const TSQuery *, uint32_t);
 const TSQueryPredicateStep *ts_query_predicates_for_pattern(
   const TSQuery *self,
   uint32_t pattern_index,
-  uint32_t *length
+  uint32_t *step_count
 );
 
 /*
@@ -815,7 +845,7 @@ bool ts_query_is_pattern_guaranteed_at_step(const TSQuery *self, uint32_t byte_o
  */
 const char *ts_query_capture_name_for_id(
   const TSQuery *,
-  uint32_t id,
+  uint32_t index,
   uint32_t *length
 );
 
@@ -825,8 +855,8 @@ const char *ts_query_capture_name_for_id(
  */
 TSQuantifier ts_query_capture_quantifier_for_id(
   const TSQuery *,
-  uint32_t pattern_id,
-  uint32_t capture_id
+  uint32_t pattern_index,
+  uint32_t capture_index
 );
 
 /**
@@ -834,7 +864,7 @@ TSQuantifier ts_query_capture_quantifier_for_id(
  */
 const char *ts_query_string_value_for_id(
   const TSQuery *,
-  uint32_t id,
+  uint32_t index,
   uint32_t *length
 );
 
@@ -933,7 +963,7 @@ bool ts_query_cursor_next_match(TSQueryCursor *, TSQueryMatch *match);
 /**
  * Exclude the match from been captured by using a pattern id.
  */
-void ts_query_cursor_remove_match(TSQueryCursor *, uint32_t id);
+void ts_query_cursor_remove_match(TSQueryCursor *, uint32_t match_id);
 
 /**
  * Advance to the next capture of the currently running query.
