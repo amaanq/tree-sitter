@@ -42,6 +42,7 @@ pub fn generate_parser_in_directory(
     repo_path: &PathBuf,
     grammar_path: Option<&str>,
     abi_version: usize,
+    optimize: Option<bool>,
     generate_bindings: bool,
     report_symbol_name: Option<&str>,
 ) -> Result<()> {
@@ -83,6 +84,7 @@ pub fn generate_parser_in_directory(
         inlines,
         simple_aliases,
         abi_version,
+        optimize,
         report_symbol_name,
     )?;
 
@@ -110,6 +112,7 @@ pub fn generate_parser_for_grammar(grammar_json: &str) -> Result<(String, String
         simple_aliases,
         tree_sitter::LANGUAGE_VERSION,
         None,
+        None,
     )?;
     Ok((input_grammar.name, parser.c_code))
 }
@@ -121,6 +124,7 @@ fn generate_parser_for_grammar_with_opts(
     inlines: InlinedProductionMap,
     simple_aliases: AliasMap,
     abi_version: usize,
+    optimize: Option<bool>,
     report_symbol_name: Option<&str>,
 ) -> Result<GeneratedParser> {
     let variable_info =
@@ -149,6 +153,7 @@ fn generate_parser_for_grammar_with_opts(
         lexical_grammar,
         simple_aliases,
         abi_version,
+        optimize,
     );
     Ok(GeneratedParser {
         c_code,

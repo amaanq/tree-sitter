@@ -74,9 +74,8 @@ struct Generator {
     unique_aliases: Vec<Alias>,
     symbol_map: HashMap<Symbol, Symbol>,
     field_names: Vec<String>,
-
-    #[allow(unused)]
     abi_version: usize,
+    optimize: Option<bool>,
 }
 
 struct TransitionSummary {
@@ -271,7 +270,13 @@ impl Generator {
         // Compiling large lexer functions can be very slow. Disabling optimizations
         // is not ideal, but only a very small fraction of overall parse time is
         // spent lexing, so the performance impact of this is negligible.
-        if self.main_lex_table.states.len() > 300 {
+        let no_optimize = if let Some(optimize) = self.optimize {
+            !optimize
+        } else {
+            self.main_lex_table.states.len() > 300
+        };
+
+        if no_optimize {
             add_line!(self, "#ifdef _MSC_VER");
             add_line!(self, "#pragma optimize(\"\", off)");
             add_line!(self, "#elif defined(__clang__)");
@@ -1642,6 +1647,7 @@ pub(crate) fn render_c_code(
     lexical_grammar: LexicalGrammar,
     default_aliases: AliasMap,
     abi_version: usize,
+    optimize: Option<bool>,
 ) -> String {
     if !(ABI_VERSION_MIN..=ABI_VERSION_MAX).contains(&abi_version) {
         panic!(
@@ -1669,6 +1675,7 @@ pub(crate) fn render_c_code(
         unique_aliases: Vec::new(),
         field_names: Vec::new(),
         abi_version,
+        optimize,
     }
     .generate()
 }

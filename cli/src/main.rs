@@ -126,6 +126,19 @@ fn run() -> Result<()> {
                         .long("report-states-for-rule")
                         .value_name("rule-name")
                         .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("optimize")
+                        .long("optimize")
+                        .short("O")
+                        .conflicts_with("no-optimize") // Use conflicts_with here
+                        .help("Enable compiler optimizations for large parsers"),
+                )
+                .arg(
+                    Arg::with_name("no-optimize")
+                        .long("no-optimize")
+                        .conflicts_with("optimize")
+                        .help("Disable compiler optimizations"),
                 ),
         )
         .subcommand(
@@ -327,11 +340,19 @@ fn run() -> Result<()> {
                             version.parse().expect("invalid abi version flag")
                         }
                     });
+            let optimize = if matches.is_present("optimize") {
+                Some(true)
+            } else if matches.is_present("no-optimize") {
+                Some(false)
+            } else {
+                None
+            };
             let generate_bindings = !matches.is_present("no-bindings");
             generate::generate_parser_in_directory(
                 &current_dir,
                 grammar_path,
                 abi_version,
+                optimize,
                 generate_bindings,
                 report_symbol_name,
             )?;
