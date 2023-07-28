@@ -980,6 +980,7 @@ pub(crate) fn build_parse_table<'a>(
     inlines: &'a InlinedProductionMap,
     variable_info: &'a Vec<VariableInfo>,
 ) -> Result<(ParseTable, Vec<TokenSet>, Vec<ParseStateInfo<'a>>)> {
+    let actual_conflicts = syntax_grammar.expected_conflicts.iter().cloned().collect();
     let item_set_builder = ParseItemSetBuilder::new(syntax_grammar, lexical_grammar, inlines);
     let mut following_tokens = vec![TokenSet::new(); lexical_grammar.variables.len()];
     populate_following_tokens(
@@ -988,19 +989,14 @@ pub(crate) fn build_parse_table<'a>(
         inlines,
         &item_set_builder,
     );
-    let actual_conflicts = syntax_grammar
-        .expected_conflicts
-        .clone()
-        .into_iter()
-        .collect();
 
     let (table, item_sets) = ParseTableBuilder {
         syntax_grammar,
         lexical_grammar,
         item_set_builder,
+        actual_conflicts,
         variable_info,
         non_terminal_extra_states: Vec::new(),
-        actual_conflicts,
         state_ids_by_item_set: IndexMap::default(),
         core_ids_by_core: HashMap::new(),
         parse_state_info_by_id: Vec::new(),
