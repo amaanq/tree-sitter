@@ -709,7 +709,7 @@ fn run() -> Result<()> {
 
         Some(("playground", matches)) => {
             let open_in_browser = !matches.get_flag("quiet");
-            playground::serve(&current_dir, open_in_browser);
+            playground::serve(&current_dir, open_in_browser)?;
         }
 
         Some(("dump-languages", _)) => {

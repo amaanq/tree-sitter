@@ -1,3 +1,4 @@
+use std::num::NonZeroU16;
 use tree_sitter::{Node, TreeCursor};
 
 pub struct Context<'a> {
@@ -17,7 +18,7 @@ impl Context<'_> {
     }
 
     #[inline(always)]
-    pub fn field_id(&self) -> Option<u16> {
+    pub fn field_id(&self) -> Option<NonZeroU16> {
         self.cursor.field_id()
     }
 

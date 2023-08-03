@@ -18,3 +18,7 @@ pub mod visitor;
 
 #[cfg(test)]
 mod tests;
+
+// To run compile fail tests
+#[cfg(doctest)]
+mod tests;

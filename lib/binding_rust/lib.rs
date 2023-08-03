@@ -10,6 +10,7 @@ use std::{
     fmt, hash, iter,
     marker::PhantomData,
     mem::MaybeUninit,
+    num::NonZeroU16,
     ops,
     os::raw::{c_char, c_void},
     ptr::{self, NonNull},
@@ -57,7 +58,7 @@ pub struct Point {
 
 /// A range of positions in a multi-line text document, both in terms of bytes and of
 /// rows and columns.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Range {
     pub start_byte: usize,
     pub end_byte: usize,
@@ -86,12 +87,19 @@ pub struct Node<'a>(ffi::TSNode, PhantomData<&'a ()>);
 #[doc(alias = "TSParser")]
 pub struct Parser(NonNull<ffi::TSParser>);
 
+/// A stateful object that is used to look up symbols valid in a specific parse state
+#[doc(alias = "TSLookaheadIterator")]
+pub struct LookaheadIterator(NonNull<ffi::TSLookaheadIterator>);
+struct LookaheadNamesIterator<'a>(&'a mut LookaheadIterator);
+
 /// A type of log message.
 #[derive(Debug, PartialEq, Eq)]
 pub enum LogType {
     Parse,
     Lex,
 }
+
+type FieldId = NonZeroU16;
 
 /// A callback that receives log messages during parser.
 type Logger<'a> = Box<dyn FnMut(LogType, &str) + 'a>;
@@ -172,27 +180,30 @@ pub struct QueryMatch<'cursor, 'tree> {
 }
 
 /// A sequence of `QueryMatch`es associated with a given `QueryCursor`.
-pub struct QueryMatches<'a, 'tree: 'a, T: TextProvider<'a>> {
+pub struct QueryMatches<'a, 'tree: 'a, T: TextProvider<I>, I: AsRef<[u8]>> {
     ptr: *mut ffi::TSQueryCursor,
     query: &'a Query,
     text_provider: T,
     buffer1: Vec<u8>,
     buffer2: Vec<u8>,
-    _tree: PhantomData<&'tree ()>,
+    _phantom: PhantomData<(&'tree (), I)>,
 }
 
 /// A sequence of `QueryCapture`s associated with a given `QueryCursor`.
-pub struct QueryCaptures<'a, 'tree: 'a, T: TextProvider<'a>> {
+pub struct QueryCaptures<'a, 'tree: 'a, T: TextProvider<I>, I: AsRef<[u8]>> {
     ptr: *mut ffi::TSQueryCursor,
     query: &'a Query,
     text_provider: T,
     buffer1: Vec<u8>,
     buffer2: Vec<u8>,
-    _tree: PhantomData<&'tree ()>,
+    _phantom: PhantomData<(&'tree (), I)>,
 }
 
-pub trait TextProvider<'a> {
-    type I: Iterator<Item = &'a [u8]> + 'a;
+pub trait TextProvider<I>
+where
+    I: AsRef<[u8]>,
+{
+    type I: Iterator<Item = I>;
     fn text(&mut self, node: Node) -> Self::I;
 }
 
@@ -264,6 +275,12 @@ impl Language {
         unsafe { ffi::ts_language_symbol_count(self.0) as usize }
     }
 
+    /// Get the number of valid states in this language.
+    #[doc(alias = "ts_language_state_count")]
+    pub fn parse_state_count(&self) -> usize {
+        unsafe { ffi::ts_language_state_count(self.0) as usize }
+    }
+
     /// Get the name of the node kind for the given numerical id.
     #[doc(alias = "ts_language_symbol_name")]
     pub fn node_kind_for_id(&self, id: u16) -> Option<&'static str> {
@@ -320,7 +337,7 @@ impl Language {
 
     /// Get the numerical id for the given field name.
     #[doc(alias = "ts_language_field_id_for_name")]
-    pub fn field_id_for_name(&self, field_name: impl AsRef<[u8]>) -> Option<u16> {
+    pub fn field_id_for_name(&self, field_name: impl AsRef<[u8]>) -> Option<FieldId> {
         let field_name = field_name.as_ref();
         let id = unsafe {
             ffi::ts_language_field_id_for_name(
@@ -329,10 +346,41 @@ impl Language {
                 field_name.len() as u32,
             )
         };
-        if id == 0 {
+        FieldId::new(id)
+    }
+
+    /// Get the next parse state. Combine this with [lookahead_iterator] to
+    /// generate completion suggestions or valid symbols in error nodes.
+    ///
+    /// Example:
+    /// ```
+    /// let state = language.next_state(node.parse_state(), node.grammar_id());
+    /// ```
+    #[doc(alias = "ts_language_next_state")]
+    pub fn next_state(&self, state: u16, id: u16) -> u16 {
+        unsafe { ffi::ts_language_next_state(self.0, state, id) }
+    }
+
+    /// Create a new lookahead iterator for this language and parse state.
+    ///
+    /// This returns `None` if state is invalid for this language.
+    ///
+    /// Iterating [LookaheadIterator] will yield valid symbols in the given
+    /// parse state. Newly created lookahead iterators will return the `ERROR`
+    /// symbol from [LookaheadIterator::current_symbol].
+    ///
+    /// Lookahead iterators can be useful to generate suggestions and improve
+    /// syntax error diagnostics. To get symbols valid in an ERROR node, use the
+    /// lookahead iterator on its first leaf node state. For `MISSING` nodes, a
+    /// lookahead iterator created on the previous non-extra leaf node may be
+    /// appropriate.
+    #[doc(alias = "ts_lookahead_iterator_new")]
+    pub fn lookahead_iterator(&self, state: u16) -> Option<LookaheadIterator> {
+        let ptr = unsafe { ffi::ts_lookahead_iterator_new(self.0, state) };
+        if ptr.is_null() {
             None
         } else {
-            Some(id)
+            Some(unsafe { LookaheadIterator::from_raw(ptr) })
         }
     }
 }
@@ -926,10 +974,26 @@ impl<'tree> Node<'tree> {
         unsafe { ffi::ts_node_symbol(self.0) }
     }
 
+    /// Get the node's type as a numerical id as it appears in the grammar
+    /// ignoring aliases.
+    #[doc(alias = "ts_node_grammar_symbol")]
+    pub fn grammar_id(&self) -> u16 {
+        unsafe { ffi::ts_node_grammar_symbol(self.0) }
+    }
+
     /// Get this node's type as a string.
     #[doc(alias = "ts_node_type")]
     pub fn kind(&self) -> &'static str {
         unsafe { CStr::from_ptr(ffi::ts_node_type(self.0)) }
+            .to_str()
+            .unwrap()
+    }
+
+    /// Get this node's symbol name as it appears in the grammar ignoring
+    /// aliases as a string.
+    #[doc(alias = "ts_node_grammar_type")]
+    pub fn grammar_name(&self) -> &'static str {
+        unsafe { CStr::from_ptr(ffi::ts_node_grammar_type(self.0)) }
             .to_str()
             .unwrap()
     }
@@ -975,8 +1039,21 @@ impl<'tree> Node<'tree> {
     ///
     /// Syntax errors represent parts of the code that could not be incorporated into a
     /// valid syntax tree.
+    #[doc(alias = "ts_node_is_error")]
     pub fn is_error(&self) -> bool {
-        self.kind_id() == u16::MAX
+        unsafe { ffi::ts_node_is_error(self.0) }
+    }
+
+    /// Get this node's parse state.
+    #[doc(alias = "ts_node_parse_state")]
+    pub fn parse_state(&self) -> u16 {
+        unsafe { ffi::ts_node_parse_state(self.0) }
+    }
+
+    /// Get the parse state after this node.
+    #[doc(alias = "ts_node_next_parse_state")]
+    pub fn next_parse_state(&self) -> u16 {
+        unsafe { ffi::ts_node_next_parse_state(self.0) }
     }
 
     /// Check if this node is *missing*.
@@ -1156,7 +1233,26 @@ impl<'tree> Node<'tree> {
         cursor: &'a mut TreeCursor<'tree>,
     ) -> impl Iterator<Item = Node<'tree>> + 'a {
         let field_id = self.language().field_id_for_name(field_name);
-        self.children_by_field_id(field_id.unwrap_or(0), cursor)
+        let mut done = field_id.is_none();
+        if !done {
+            cursor.reset(*self);
+            cursor.goto_first_child();
+        }
+        iter::from_fn(move || {
+            if !done {
+                while cursor.field_id() != field_id {
+                    if !cursor.goto_next_sibling() {
+                        return None;
+                    }
+                }
+                let result = cursor.node();
+                if !cursor.goto_next_sibling() {
+                    done = true;
+                }
+                return Some(result);
+            }
+            None
+        })
     }
 
     /// Iterate over this node's children with a given field id.
@@ -1164,14 +1260,14 @@ impl<'tree> Node<'tree> {
     /// See also [Node::children_by_field_name].
     pub fn children_by_field_id<'a>(
         &self,
-        field_id: u16,
+        field_id: FieldId,
         cursor: &'a mut TreeCursor<'tree>,
     ) -> impl Iterator<Item = Node<'tree>> + 'a {
         cursor.reset(*self);
         cursor.goto_first_child();
         let mut done = false;
         iter::from_fn(move || {
-            while !done {
+            if !done {
                 while cursor.field_id() != Some(field_id) {
                     if !cursor.goto_next_sibling() {
                         return None;
@@ -1338,15 +1434,9 @@ impl<'a> TreeCursor<'a> {
     ///
     /// See also [field_name](TreeCursor::field_name).
     #[doc(alias = "ts_tree_cursor_current_field_id")]
-    pub fn field_id(&self) -> Option<u16> {
-        unsafe {
-            let id = ffi::ts_tree_cursor_current_field_id(&self.0);
-            if id == 0 {
-                None
-            } else {
-                Some(id)
-            }
-        }
+    pub fn field_id(&self) -> Option<FieldId> {
+        let id = unsafe { ffi::ts_tree_cursor_current_field_id(&self.0) };
+        FieldId::new(id)
     }
 
     /// Get the field name of this tree cursor's current node.
@@ -1386,6 +1476,19 @@ impl<'a> TreeCursor<'a> {
         return unsafe { ffi::ts_tree_cursor_goto_first_child(&mut self.0) };
     }
 
+    /// Move this cursor to the last child of its current node.
+    ///
+    /// This returns `true` if the cursor successfully moved, and returns
+    /// `false` if there were no children.
+    ///
+    /// Note that this function may be slower than
+    /// [`goto_first_child`](TreeCursor::goto_first_child) because it needs to
+    /// iterate through all the children to compute the child's position.
+    #[doc(alias = "ts_tree_cursor_goto_last_child")]
+    pub fn goto_last_child(&mut self) -> bool {
+        return unsafe { ffi::ts_tree_cursor_goto_last_child(&mut self.0) };
+    }
+
     /// Move this cursor to the parent of its current node.
     ///
     /// This returns `true` if the cursor successfully moved, and returns `false`
@@ -1412,6 +1515,21 @@ impl<'a> TreeCursor<'a> {
         return unsafe {
             ffi::ts_tree_cursor_goto_descendant(&mut self.0, descendant_index as u32)
         };
+    }
+
+    /// Move this cursor to the previous sibling of its current node.
+    ///
+    /// This returns `true` if the cursor successfully moved, and returns
+    /// `false` if there was no previous sibling node.
+    ///
+    /// Note, that this function may be slower than
+    /// [`goto_next_sibling`](TreeCursor::goto_next_sibling) due to how node
+    /// positions are stored. In the worst case, this will need to iterate
+    /// through all the children upto the previous sibling node to recalculate
+    /// its position.
+    #[doc(alias = "ts_tree_cursor_goto_previous_sibling")]
+    pub fn goto_previous_sibling(&mut self) -> bool {
+        return unsafe { ffi::ts_tree_cursor_goto_previous_sibling(&mut self.0) };
     }
 
     /// Move this cursor to the first child of its current node that extends beyond
@@ -1454,6 +1572,15 @@ impl<'a> TreeCursor<'a> {
             ffi::ts_tree_cursor_reset(&mut self.0, node.0)
         }
     }
+
+    /// Re-initialize a tree cursor to the same position as another cursor.
+    ///
+    /// Unlike `reset`, this will not lose parent information and
+    /// allows reusing already created cursors.
+    #[doc(alias = "ts_tree_cursor_reset_to")]
+    pub fn reset_to(&mut self, cursor: TreeCursor<'a>) {
+        unsafe { ffi::ts_tree_cursor_reset_to(&mut self.0, &cursor.0) };
+    }
 }
 
 impl<'a> Clone for TreeCursor<'a> {
@@ -1465,6 +1592,89 @@ impl<'a> Clone for TreeCursor<'a> {
 impl<'a> Drop for TreeCursor<'a> {
     fn drop(&mut self) {
         unsafe { ffi::ts_tree_cursor_delete(&mut self.0) }
+    }
+}
+
+impl LookaheadIterator {
+    /// Get the current language of the lookahead iterator.
+    #[doc(alias = "ts_lookahead_iterator_language")]
+    pub fn language(&self) -> Language {
+        Language(unsafe { ffi::ts_lookahead_iterator_language(self.0.as_ptr()) })
+    }
+
+    /// Get the current symbol of the lookahead iterator.
+    #[doc(alias = "ts_lookahead_iterator_current_symbol")]
+    pub fn current_symbol(&self) -> u16 {
+        unsafe { ffi::ts_lookahead_iterator_current_symbol(self.0.as_ptr()) }
+    }
+
+    /// Get the current symbol name of the lookahead iterator.
+    #[doc(alias = "ts_lookahead_iterator_current_symbol_name")]
+    pub fn current_symbol_name(&self) -> &'static str {
+        unsafe {
+            CStr::from_ptr(ffi::ts_lookahead_iterator_current_symbol_name(
+                self.0.as_ptr(),
+            ))
+            .to_str()
+            .unwrap()
+        }
+    }
+
+    /// Reset the lookahead iterator.
+    ///
+    /// This returns `true` if the language was set successfully and `false`
+    /// otherwise.
+    #[doc(alias = "ts_lookahead_iterator_reset")]
+    pub fn reset(&mut self, language: Language, state: u16) -> bool {
+        unsafe { ffi::ts_lookahead_iterator_reset(self.0.as_ptr(), language.0, state) }
+    }
+
+    /// Reset the lookahead iterator to another state.
+    ///
+    /// This returns `true` if the iterator was reset to the given state and `false`
+    /// otherwise.
+    #[doc(alias = "ts_lookahead_iterator_reset_state")]
+    pub fn reset_state(&mut self, state: u16) -> bool {
+        unsafe { ffi::ts_lookahead_iterator_reset_state(self.0.as_ptr(), state) }
+    }
+
+    /// Iterate symbol names.
+    pub fn iter_names(&mut self) -> impl Iterator<Item = &'static str> + '_ {
+        LookaheadNamesIterator(self)
+    }
+}
+
+impl Iterator for LookaheadNamesIterator<'_> {
+    type Item = &'static str;
+
+    #[doc(alias = "ts_lookahead_iterator_advance")]
+    fn next(&mut self) -> Option<Self::Item> {
+        if !(unsafe { ffi::ts_lookahead_iterator_advance(self.0 .0.as_ptr()) }) {
+            None
+        } else {
+            Some(self.0.current_symbol_name())
+        }
+    }
+}
+
+impl Iterator for LookaheadIterator {
+    type Item = u16;
+
+    #[doc(alias = "ts_lookahead_iterator_advance")]
+    fn next(&mut self) -> Option<Self::Item> {
+        // the first symbol is always `0` so we can safely skip it
+        if !(unsafe { ffi::ts_lookahead_iterator_advance(self.0.as_ptr()) }) {
+            None
+        } else {
+            Some(self.current_symbol())
+        }
+    }
+}
+
+impl Drop for LookaheadIterator {
+    #[doc(alias = "ts_lookahead_iterator_delete")]
+    fn drop(&mut self) {
+        unsafe { ffi::ts_lookahead_iterator_delete(self.0.as_ptr()) }
     }
 }
 
@@ -1996,12 +2206,12 @@ impl QueryCursor {
     /// Because multiple patterns can match the same set of nodes, one match may contain
     /// captures that appear *before* some of the captures from a previous match.
     #[doc(alias = "ts_query_cursor_exec")]
-    pub fn matches<'a, 'tree: 'a, T: TextProvider<'a> + 'a>(
+    pub fn matches<'a, 'tree: 'a, T: TextProvider<I>, I: AsRef<[u8]>>(
         &'a mut self,
         query: &'a Query,
         node: Node<'tree>,
         text_provider: T,
-    ) -> QueryMatches<'a, 'tree, T> {
+    ) -> QueryMatches<'a, 'tree, T, I> {
         let ptr = self.ptr.as_ptr();
         unsafe { ffi::ts_query_cursor_exec(ptr, query.ptr.as_ptr(), node.0) };
         QueryMatches {
@@ -2010,7 +2220,7 @@ impl QueryCursor {
             text_provider,
             buffer1: Default::default(),
             buffer2: Default::default(),
-            _tree: PhantomData,
+            _phantom: PhantomData,
         }
     }
 
@@ -2019,12 +2229,12 @@ impl QueryCursor {
     /// This is useful if you don't care about which pattern matched, and just want a single,
     /// ordered sequence of captures.
     #[doc(alias = "ts_query_cursor_exec")]
-    pub fn captures<'a, 'tree: 'a, T: TextProvider<'a> + 'a>(
+    pub fn captures<'a, 'tree: 'a, T: TextProvider<I>, I: AsRef<[u8]>>(
         &'a mut self,
         query: &'a Query,
         node: Node<'tree>,
         text_provider: T,
-    ) -> QueryCaptures<'a, 'tree, T> {
+    ) -> QueryCaptures<'a, 'tree, T, I> {
         let ptr = self.ptr.as_ptr();
         unsafe { ffi::ts_query_cursor_exec(ptr, query.ptr.as_ptr(), node.0) };
         QueryCaptures {
@@ -2033,7 +2243,7 @@ impl QueryCursor {
             text_provider,
             buffer1: Default::default(),
             buffer2: Default::default(),
-            _tree: PhantomData,
+            _phantom: PhantomData,
         }
     }
 
@@ -2113,30 +2323,46 @@ impl<'a, 'tree> QueryMatch<'a, 'tree> {
         }
     }
 
-    fn satisfies_text_predicates(
+    fn satisfies_text_predicates<I: AsRef<[u8]>>(
         &self,
         query: &Query,
-        buffer1: &mut Vec<u8>,
-        buffer2: &mut Vec<u8>,
-        text_provider: &mut impl TextProvider<'a>,
+        buffer1: &'a mut Vec<u8>,
+        buffer2: &'a mut Vec<u8>,
+        text_provider: &mut impl TextProvider<I>,
     ) -> bool {
-        fn get_text<'a, 'b: 'a, I: Iterator<Item = &'b [u8]>>(
+        struct NodeText<'a, T> {
             buffer: &'a mut Vec<u8>,
-            mut chunks: I,
-        ) -> &'a [u8] {
-            let first_chunk = chunks.next().unwrap_or(&[]);
-            if let Some(next_chunk) = chunks.next() {
-                buffer.clear();
-                buffer.extend_from_slice(first_chunk);
-                buffer.extend_from_slice(next_chunk);
-                for chunk in chunks {
-                    buffer.extend_from_slice(chunk);
+            first_chunk: Option<T>,
+        }
+        impl<'a, T: AsRef<[u8]>> NodeText<'a, T> {
+            fn new(buffer: &'a mut Vec<u8>) -> Self {
+                Self {
+                    buffer,
+                    first_chunk: None,
                 }
-                buffer.as_slice()
-            } else {
-                first_chunk
+            }
+
+            fn get_text(&mut self, chunks: &mut impl Iterator<Item = T>) -> &[u8] {
+                self.first_chunk = chunks.next();
+                if let Some(next_chunk) = chunks.next() {
+                    self.buffer.clear();
+                    self.buffer
+                        .extend_from_slice(self.first_chunk.as_ref().unwrap().as_ref());
+                    self.buffer.extend_from_slice(next_chunk.as_ref());
+                    for chunk in chunks {
+                        self.buffer.extend_from_slice(chunk.as_ref());
+                    }
+                    self.buffer.as_slice()
+                } else if let Some(ref first_chunk) = self.first_chunk {
+                    first_chunk.as_ref()
+                } else {
+                    &[]
+                }
             }
         }
+
+        let mut node_text1 = NodeText::new(buffer1);
+        let mut node_text2 = NodeText::new(buffer2);
 
         query.text_predicates[self.pattern_index]
             .iter()
@@ -2146,8 +2372,10 @@ impl<'a, 'tree> QueryMatch<'a, 'tree> {
                     let node2 = self.nodes_for_capture_index(*j).next();
                     match (node1, node2) {
                         (Some(node1), Some(node2)) => {
-                            let text1 = get_text(buffer1, text_provider.text(node1));
-                            let text2 = get_text(buffer2, text_provider.text(node2));
+                            let mut text1 = text_provider.text(node1);
+                            let mut text2 = text_provider.text(node2);
+                            let text1 = node_text1.get_text(&mut text1);
+                            let text2 = node_text2.get_text(&mut text2);
                             (text1 == text2) == *is_positive
                         }
                         _ => true,
@@ -2157,7 +2385,8 @@ impl<'a, 'tree> QueryMatch<'a, 'tree> {
                     let node = self.nodes_for_capture_index(*i).next();
                     match node {
                         Some(node) => {
-                            let text = get_text(buffer1, text_provider.text(node));
+                            let mut text = text_provider.text(node);
+                            let text = node_text1.get_text(&mut text);
                             (text == s.as_bytes()) == *is_positive
                         }
                         None => true,
@@ -2167,7 +2396,8 @@ impl<'a, 'tree> QueryMatch<'a, 'tree> {
                     let node = self.nodes_for_capture_index(*i).next();
                     match node {
                         Some(node) => {
-                            let text = get_text(buffer1, text_provider.text(node));
+                            let mut text = text_provider.text(node);
+                            let text = node_text1.get_text(&mut text);
                             r.is_match(text) == *is_positive
                         }
                         None => true,
@@ -2187,7 +2417,7 @@ impl QueryProperty {
     }
 }
 
-impl<'a, 'tree, T: TextProvider<'a>> Iterator for QueryMatches<'a, 'tree, T> {
+impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> Iterator for QueryMatches<'a, 'tree, T, I> {
     type Item = QueryMatch<'a, 'tree>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2212,7 +2442,7 @@ impl<'a, 'tree, T: TextProvider<'a>> Iterator for QueryMatches<'a, 'tree, T> {
     }
 }
 
-impl<'a, 'tree, T: TextProvider<'a>> Iterator for QueryCaptures<'a, 'tree, T> {
+impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> Iterator for QueryCaptures<'a, 'tree, T, I> {
     type Item = (QueryMatch<'a, 'tree>, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2244,7 +2474,7 @@ impl<'a, 'tree, T: TextProvider<'a>> Iterator for QueryCaptures<'a, 'tree, T> {
     }
 }
 
-impl<'a, 'tree, T: TextProvider<'a>> QueryMatches<'a, 'tree, T> {
+impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> QueryMatches<'a, 'tree, T, I> {
     #[doc(alias = "ts_query_cursor_set_byte_range")]
     pub fn set_byte_range(&mut self, range: ops::Range<usize>) {
         unsafe {
@@ -2260,7 +2490,7 @@ impl<'a, 'tree, T: TextProvider<'a>> QueryMatches<'a, 'tree, T> {
     }
 }
 
-impl<'a, 'tree, T: TextProvider<'a>> QueryCaptures<'a, 'tree, T> {
+impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> QueryCaptures<'a, 'tree, T, I> {
     #[doc(alias = "ts_query_cursor_set_byte_range")]
     pub fn set_byte_range(&mut self, range: ops::Range<usize>) {
         unsafe {
@@ -2286,19 +2516,20 @@ impl<'cursor, 'tree> fmt::Debug for QueryMatch<'cursor, 'tree> {
     }
 }
 
-impl<'a, F, I> TextProvider<'a> for F
+impl<F, R, I> TextProvider<I> for F
 where
-    F: FnMut(Node) -> I,
-    I: Iterator<Item = &'a [u8]> + 'a,
+    F: FnMut(Node) -> R,
+    R: Iterator<Item = I>,
+    I: AsRef<[u8]>,
 {
-    type I = I;
+    type I = R;
 
     fn text(&mut self, node: Node) -> Self::I {
         (self)(node)
     }
 }
 
-impl<'a> TextProvider<'a> for &'a [u8] {
+impl<'a> TextProvider<&'a [u8]> for &'a [u8] {
     type I = iter::Once<&'a [u8]>;
 
     fn text(&mut self, node: Node) -> Self::I {
@@ -2509,12 +2740,28 @@ impl error::Error for LanguageError {}
 impl error::Error for QueryError {}
 
 unsafe impl Send for Language {}
-unsafe impl Send for Parser {}
-unsafe impl Send for Query {}
-unsafe impl Send for QueryCursor {}
-unsafe impl Send for Tree {}
 unsafe impl Sync for Language {}
+
+unsafe impl Send for Node<'_> {}
+unsafe impl Sync for Node<'_> {}
+
+unsafe impl Send for LookaheadIterator {}
+unsafe impl Sync for LookaheadIterator {}
+
+unsafe impl Send for LookaheadNamesIterator<'_> {}
+unsafe impl Sync for LookaheadNamesIterator<'_> {}
+
+unsafe impl Send for Parser {}
 unsafe impl Sync for Parser {}
+
+unsafe impl Send for Query {}
 unsafe impl Sync for Query {}
+
+unsafe impl Send for QueryCursor {}
 unsafe impl Sync for QueryCursor {}
+
+unsafe impl Send for Tree {}
 unsafe impl Sync for Tree {}
+
+unsafe impl Send for TreeCursor<'_> {}
+unsafe impl Sync for TreeCursor<'_> {}
