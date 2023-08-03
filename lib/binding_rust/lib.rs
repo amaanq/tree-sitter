@@ -81,7 +81,7 @@ pub struct InputEdit {
 #[doc(alias = "TSNode")]
 #[derive(Clone, Copy)]
 #[repr(transparent)]
-pub struct Node<'a>(ffi::TSNode, PhantomData<&'a ()>);
+pub struct Node<'tree>(ffi::TSNode, PhantomData<&'tree ()>);
 
 /// A stateful object that this is used to produce a `Tree` based on some source code.
 #[doc(alias = "TSParser")]
@@ -106,7 +106,7 @@ type Logger<'a> = Box<dyn FnMut(LogType, &str) + 'a>;
 
 /// A stateful object for walking a syntax `Tree` efficiently.
 #[doc(alias = "TSTreeCursor")]
-pub struct TreeCursor<'a>(ffi::TSTreeCursor, PhantomData<&'a ()>);
+pub struct TreeCursor<'cursor>(ffi::TSTreeCursor, PhantomData<&'cursor ()>);
 
 /// A set of patterns that match nodes in a syntax tree.
 #[doc(alias = "TSQuery")]
@@ -180,23 +180,23 @@ pub struct QueryMatch<'cursor, 'tree> {
 }
 
 /// A sequence of `QueryMatch`es associated with a given `QueryCursor`.
-pub struct QueryMatches<'a, 'tree: 'a, T: TextProvider<I>, I: AsRef<[u8]>> {
+pub struct QueryMatches<'query, 'cursor, T: TextProvider<I>, I: AsRef<[u8]>> {
     ptr: *mut ffi::TSQueryCursor,
-    query: &'a Query,
+    query: &'query Query,
     text_provider: T,
     buffer1: Vec<u8>,
     buffer2: Vec<u8>,
-    _phantom: PhantomData<(&'tree (), I)>,
+    _phantom: PhantomData<(&'cursor (), I)>,
 }
 
 /// A sequence of `QueryCapture`s associated with a given `QueryCursor`.
-pub struct QueryCaptures<'a, 'tree: 'a, T: TextProvider<I>, I: AsRef<[u8]>> {
+pub struct QueryCaptures<'query, 'cursor, T: TextProvider<I>, I: AsRef<[u8]>> {
     ptr: *mut ffi::TSQueryCursor,
-    query: &'a Query,
+    query: &'query Query,
     text_provider: T,
     buffer1: Vec<u8>,
     buffer2: Vec<u8>,
-    _phantom: PhantomData<(&'tree (), I)>,
+    _phantom: PhantomData<(&'cursor (), I)>,
 }
 
 pub trait TextProvider<I>
@@ -210,8 +210,8 @@ where
 /// A particular `Node` that has been captured with a particular name within a `Query`.
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
-pub struct QueryCapture<'a> {
-    pub node: Node<'a>,
+pub struct QueryCapture<'tree> {
+    pub node: Node<'tree>,
     pub index: u32,
 }
 
@@ -528,7 +528,7 @@ impl Parser {
     ///   If the text of the document has changed since `old_tree` was
     ///   created, then you must edit `old_tree` to match the new text using
     ///   [Tree::edit].
-    pub fn parse_with<'a, T: AsRef<[u8]>, F: FnMut(usize, Point) -> T>(
+    pub fn parse_with<T: AsRef<[u8]>, F: FnMut(usize, Point) -> T>(
         &mut self,
         callback: &mut F,
         old_tree: Option<&Tree>,
@@ -541,7 +541,7 @@ impl Parser {
         let mut payload: (&mut F, Option<T>) = (callback, None);
 
         // This C function is passed to Tree-sitter as the input callback.
-        unsafe extern "C" fn read<'a, T: AsRef<[u8]>, F: FnMut(usize, Point) -> T>(
+        unsafe extern "C" fn read<T: AsRef<[u8]>, F: FnMut(usize, Point) -> T>(
             payload: *mut c_void,
             byte_offset: u32,
             position: ffi::TSPoint,
@@ -617,7 +617,7 @@ impl Parser {
     ///   If the text of the document has changed since `old_tree` was
     ///   created, then you must edit `old_tree` to match the new text using
     ///   [Tree::edit].
-    pub fn parse_utf16_le_with<'a, T: AsRef<[u16]>, F: FnMut(usize, Point) -> T>(
+    pub fn parse_utf16_le_with<T: AsRef<[u16]>, F: FnMut(usize, Point) -> T>(
         &mut self,
         callback: &mut F,
         old_tree: Option<&Tree>,
@@ -630,7 +630,7 @@ impl Parser {
         let mut payload: (&mut F, Option<T>) = (callback, None);
 
         // This C function is passed to Tree-sitter as the input callback.
-        unsafe extern "C" fn read<'a, T: AsRef<[u16]>, F: FnMut(usize, Point) -> T>(
+        unsafe extern "C" fn read<T: AsRef<[u16]>, F: FnMut(usize, Point) -> T>(
             payload: *mut c_void,
             byte_offset: u32,
             position: ffi::TSPoint,
@@ -785,10 +785,7 @@ impl Parser {
     /// If this requirement is not satisfied, method will return IncludedRangesError
     /// error with an offset in the passed ranges slice pointing to a first incorrect range.
     #[doc(alias = "ts_parser_set_included_ranges")]
-    pub fn set_included_ranges<'a>(
-        &mut self,
-        ranges: &'a [Range],
-    ) -> Result<(), IncludedRangesError> {
+    pub fn set_included_ranges(&mut self, ranges: &[Range]) -> Result<(), IncludedRangesError> {
         let ts_ranges: Vec<ffi::TSRange> =
             ranges.iter().cloned().map(|range| range.into()).collect();
         let result = unsafe {
@@ -1131,7 +1128,7 @@ impl<'tree> Node<'tree> {
     /// if you might be iterating over a long list of children, you should use
     /// [Node::named_children] instead.
     #[doc(alias = "ts_node_named_child")]
-    pub fn named_child<'a>(&'a self, i: usize) -> Option<Self> {
+    pub fn named_child(&self, i: usize) -> Option<Self> {
         Self::new(unsafe { ffi::ts_node_named_child(self.0, i as u32) })
     }
 
@@ -1190,10 +1187,10 @@ impl<'tree> Node<'tree> {
     ///
     /// If you're walking the tree recursively, you may want to use the `TreeCursor`
     /// APIs directly instead.
-    pub fn children<'a>(
+    pub fn children<'cursor>(
         &self,
-        cursor: &'a mut TreeCursor<'tree>,
-    ) -> impl ExactSizeIterator<Item = Node<'tree>> + 'a {
+        cursor: &'cursor mut TreeCursor<'tree>,
+    ) -> impl ExactSizeIterator<Item = Node<'tree>> + 'cursor {
         cursor.reset(*self);
         cursor.goto_first_child();
         (0..self.child_count()).into_iter().map(move |_| {
@@ -1206,10 +1203,10 @@ impl<'tree> Node<'tree> {
     /// Iterate over this node's named children.
     ///
     /// See also [Node::children].
-    pub fn named_children<'a>(
+    pub fn named_children<'cursor>(
         &self,
-        cursor: &'a mut TreeCursor<'tree>,
-    ) -> impl ExactSizeIterator<Item = Node<'tree>> + 'a {
+        cursor: &'cursor mut TreeCursor<'tree>,
+    ) -> impl ExactSizeIterator<Item = Node<'tree>> + 'cursor {
         cursor.reset(*self);
         cursor.goto_first_child();
         (0..self.named_child_count()).into_iter().map(move |_| {
@@ -1227,11 +1224,11 @@ impl<'tree> Node<'tree> {
     /// Iterate over this node's children with a given field name.
     ///
     /// See also [Node::children].
-    pub fn children_by_field_name<'a>(
+    pub fn children_by_field_name<'cursor>(
         &self,
         field_name: &str,
-        cursor: &'a mut TreeCursor<'tree>,
-    ) -> impl Iterator<Item = Node<'tree>> + 'a {
+        cursor: &'cursor mut TreeCursor<'tree>,
+    ) -> impl Iterator<Item = Node<'tree>> + 'cursor {
         let field_id = self.language().field_id_for_name(field_name);
         let mut done = field_id.is_none();
         if !done {
@@ -1258,11 +1255,11 @@ impl<'tree> Node<'tree> {
     /// Iterate over this node's children with a given field id.
     ///
     /// See also [Node::children_by_field_name].
-    pub fn children_by_field_id<'a>(
+    pub fn children_by_field_id<'cursor>(
         &self,
         field_id: FieldId,
-        cursor: &'a mut TreeCursor<'tree>,
-    ) -> impl Iterator<Item = Node<'tree>> + 'a {
+        cursor: &'cursor mut TreeCursor<'tree>,
+    ) -> impl Iterator<Item = Node<'tree>> + 'cursor {
         cursor.reset(*self);
         cursor.goto_first_child();
         let mut done = false;
@@ -1390,15 +1387,15 @@ impl<'tree> Node<'tree> {
     }
 }
 
-impl<'a> PartialEq for Node<'a> {
+impl PartialEq for Node<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.0.id == other.0.id
     }
 }
 
-impl<'a> Eq for Node<'a> {}
+impl Eq for Node<'_> {}
 
-impl<'a> hash::Hash for Node<'a> {
+impl hash::Hash for Node<'_> {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.0.id.hash(state);
         self.0.context[0].hash(state);
@@ -1408,7 +1405,7 @@ impl<'a> hash::Hash for Node<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Node<'a> {
+impl fmt::Debug for Node<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(
             f,
@@ -1420,10 +1417,10 @@ impl<'a> fmt::Debug for Node<'a> {
     }
 }
 
-impl<'a> TreeCursor<'a> {
+impl<'cursor> TreeCursor<'cursor> {
     /// Get the tree cursor's current [Node].
     #[doc(alias = "ts_tree_cursor_current_node")]
-    pub fn node(&self) -> Node<'a> {
+    pub fn node(&self) -> Node<'cursor> {
         Node(
             unsafe { ffi::ts_tree_cursor_current_node(&self.0) },
             PhantomData,
@@ -1568,7 +1565,7 @@ impl<'a> TreeCursor<'a> {
     #[doc(alias = "ts_tree_cursor_reset")]
     pub fn reset<'b>(&mut self, node: Node<'b>) {
         unsafe {
-            std::mem::transmute::<PhantomData<&'a ()>, PhantomData<&'b ()>>(self.1);
+            std::mem::transmute::<PhantomData<&'_ ()>, PhantomData<&'b ()>>(self.1);
             ffi::ts_tree_cursor_reset(&mut self.0, node.0)
         }
     }
@@ -1578,18 +1575,18 @@ impl<'a> TreeCursor<'a> {
     /// Unlike `reset`, this will not lose parent information and
     /// allows reusing already created cursors.
     #[doc(alias = "ts_tree_cursor_reset_to")]
-    pub fn reset_to(&mut self, cursor: TreeCursor<'a>) {
+    pub fn reset_to(&mut self, cursor: TreeCursor<'cursor>) {
         unsafe { ffi::ts_tree_cursor_reset_to(&mut self.0, &cursor.0) };
     }
 }
 
-impl<'a> Clone for TreeCursor<'a> {
+impl Clone for TreeCursor<'_> {
     fn clone(&self) -> Self {
         TreeCursor(unsafe { ffi::ts_tree_cursor_copy(&self.0) }, PhantomData)
     }
 }
 
-impl<'a> Drop for TreeCursor<'a> {
+impl Drop for TreeCursor<'_> {
     fn drop(&mut self) {
         unsafe { ffi::ts_tree_cursor_delete(&mut self.0) }
     }
@@ -2206,12 +2203,12 @@ impl QueryCursor {
     /// Because multiple patterns can match the same set of nodes, one match may contain
     /// captures that appear *before* some of the captures from a previous match.
     #[doc(alias = "ts_query_cursor_exec")]
-    pub fn matches<'a, 'tree: 'a, T: TextProvider<I>, I: AsRef<[u8]>>(
-        &'a mut self,
-        query: &'a Query,
+    pub fn matches<'query, 'tree, T: TextProvider<I>, I: AsRef<[u8]>>(
+        &mut self,
+        query: &'query Query,
         node: Node<'tree>,
         text_provider: T,
-    ) -> QueryMatches<'a, 'tree, T, I> {
+    ) -> QueryMatches<'query, 'tree, T, I> {
         let ptr = self.ptr.as_ptr();
         unsafe { ffi::ts_query_cursor_exec(ptr, query.ptr.as_ptr(), node.0) };
         QueryMatches {
@@ -2229,12 +2226,12 @@ impl QueryCursor {
     /// This is useful if you don't care about which pattern matched, and just want a single,
     /// ordered sequence of captures.
     #[doc(alias = "ts_query_cursor_exec")]
-    pub fn captures<'a, 'tree: 'a, T: TextProvider<I>, I: AsRef<[u8]>>(
-        &'a mut self,
-        query: &'a Query,
+    pub fn captures<'query, 'tree, T: TextProvider<I>, I: AsRef<[u8]>>(
+        &mut self,
+        query: &'query Query,
         node: Node<'tree>,
         text_provider: T,
-    ) -> QueryCaptures<'a, 'tree, T, I> {
+    ) -> QueryCaptures<'query, 'tree, T, I> {
         let ptr = self.ptr.as_ptr();
         unsafe { ffi::ts_query_cursor_exec(ptr, query.ptr.as_ptr(), node.0) };
         QueryCaptures {
@@ -2273,16 +2270,31 @@ impl QueryCursor {
         self
     }
 
+    /// Set the maximum start depth for a query cursor.
+    ///
+    /// This prevents cursors from exploring children nodes at a certain depth.
+    /// Note if a pattern includes many children, then they will still be checked.
+    ///
+    /// The zero max start depth value can be used as a special behavior and
+    /// it helps to destructure a subtree by staying on a node and using captures
+    /// for interested parts. Note that the zero max start depth only limit a search
+    /// depth for a pattern's root node but other nodes that are parts of the pattern
+    /// may be searched at any depth what defined by the pattern structure.
+    ///
+    /// Set to `None` to remove the maximum start depth.
     #[doc(alias = "ts_query_cursor_set_max_start_depth")]
-    pub fn set_max_start_depth(&mut self, max_start_depth: u32) -> &mut Self {
+    pub fn set_max_start_depth(&mut self, max_start_depth: Option<u32>) -> &mut Self {
         unsafe {
-            ffi::ts_query_cursor_set_max_start_depth(self.ptr.as_ptr(), max_start_depth);
+            ffi::ts_query_cursor_set_max_start_depth(
+                self.ptr.as_ptr(),
+                max_start_depth.unwrap_or(u32::MAX),
+            );
         }
         self
     }
 }
 
-impl<'a, 'tree> QueryMatch<'a, 'tree> {
+impl<'tree> QueryMatch<'_, 'tree> {
     pub fn id(&self) -> u32 {
         self.id
     }
@@ -2326,8 +2338,8 @@ impl<'a, 'tree> QueryMatch<'a, 'tree> {
     fn satisfies_text_predicates<I: AsRef<[u8]>>(
         &self,
         query: &Query,
-        buffer1: &'a mut Vec<u8>,
-        buffer2: &'a mut Vec<u8>,
+        buffer1: &mut Vec<u8>,
+        buffer2: &mut Vec<u8>,
         text_provider: &mut impl TextProvider<I>,
     ) -> bool {
         struct NodeText<'a, T> {
@@ -2417,8 +2429,10 @@ impl QueryProperty {
     }
 }
 
-impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> Iterator for QueryMatches<'a, 'tree, T, I> {
-    type Item = QueryMatch<'a, 'tree>;
+impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
+    for QueryMatches<'query, 'tree, T, I>
+{
+    type Item = QueryMatch<'query, 'tree>;
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
@@ -2442,8 +2456,10 @@ impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> Iterator for QueryMatches<'a
     }
 }
 
-impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> Iterator for QueryCaptures<'a, 'tree, T, I> {
-    type Item = (QueryMatch<'a, 'tree>, usize);
+impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
+    for QueryCaptures<'query, 'tree, T, I>
+{
+    type Item = (QueryMatch<'query, 'tree>, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
@@ -2474,7 +2490,7 @@ impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> Iterator for QueryCaptures<'
     }
 }
 
-impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> QueryMatches<'a, 'tree, T, I> {
+impl<T: TextProvider<I>, I: AsRef<[u8]>> QueryMatches<'_, '_, T, I> {
     #[doc(alias = "ts_query_cursor_set_byte_range")]
     pub fn set_byte_range(&mut self, range: ops::Range<usize>) {
         unsafe {
@@ -2490,7 +2506,7 @@ impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> QueryMatches<'a, 'tree, T, I
     }
 }
 
-impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> QueryCaptures<'a, 'tree, T, I> {
+impl<T: TextProvider<I>, I: AsRef<[u8]>> QueryCaptures<'_, '_, T, I> {
     #[doc(alias = "ts_query_cursor_set_byte_range")]
     pub fn set_byte_range(&mut self, range: ops::Range<usize>) {
         unsafe {
@@ -2506,7 +2522,7 @@ impl<'a, 'tree, T: TextProvider<I>, I: AsRef<[u8]>> QueryCaptures<'a, 'tree, T, 
     }
 }
 
-impl<'cursor, 'tree> fmt::Debug for QueryMatch<'cursor, 'tree> {
+impl fmt::Debug for QueryMatch<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -2607,7 +2623,7 @@ impl From<ffi::TSRange> for Range {
     }
 }
 
-impl<'a> Into<ffi::TSInputEdit> for &'a InputEdit {
+impl Into<ffi::TSInputEdit> for &'_ InputEdit {
     fn into(self) -> ffi::TSInputEdit {
         ffi::TSInputEdit {
             start_byte: self.start_byte as u32,
