@@ -155,6 +155,14 @@ fn run() -> Result<()> {
                             .num_args(1),
                     )
                     .arg(
+                        Arg::new("js-runtime")
+                            .long("js-runtime")
+                            .value_name("executable")
+                            .env("TREE_SITTER_JS_RUNTIME")
+                            .num_args(1)
+                            .help("Use a JavaScript runtime other than node"),
+                    )
+                    .arg(
                         Arg::new("no-minimize")
                             .long("no-minimize")
                             .action(ArgAction::SetTrue),
@@ -383,6 +391,7 @@ fn run() -> Result<()> {
             let debug_build = matches.get_flag("debug-build");
             let build = matches.get_flag("build");
             let grammar_path = matches.get_one_str("grammar-path");
+            let js_runtime = matches.get_one_str("js-runtime");
             let report_symbol_name = matches.get_one_str("report-states-for-rule");
             if matches.get_flag("log") {
                 logger::init();
@@ -403,6 +412,7 @@ fn run() -> Result<()> {
                 abi_version,
                 generate_bindings,
                 report_symbol_name,
+                js_runtime,
             )?;
             if build {
                 let mut loader = loader_with_libdir(libdir)?;
