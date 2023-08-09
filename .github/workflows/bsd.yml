@@ -1,0 +1,108 @@
+name: Build & Test (BSDs)
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  CROSS_DEBUG: 1
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        default: ${{ github.ref }}
+        type: string
+      run-tests:
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      run-tests:
+        description: Run tests
+        default: true
+        type: boolean
+      rust-test-threads:
+        description: Number of Rust test threads
+        default: ""
+        type: string
+
+jobs:
+  freebsd:
+    runs-on: macos-12
+    name: freebsd-x86_64 (x86_64-unknown-freebsd)
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build & Test on FreeBSD
+        uses: vmactions/freebsd-vm@v0.3.1
+        with:
+          usesh: true
+          mem: 2048
+          copyback: false
+          prepare: |
+            pkg install -y curl node bash git
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+          run: |
+            . $HOME/.profile
+            . "$HOME/.cargo/env"
+            cargo build --release
+            ./script/fetch-fixtures
+            cargo test
+
+  openbsd:
+    runs-on: macos-12
+    name: openbsd-x86_64 (x86_64-unknown-openbsd)
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build & Test on OpenBSD
+        uses: vmactions/openbsd-vm@v0.1.2
+        with:
+          usesh: true
+          mem: 2048
+          copyback: false
+          prepare: |
+            pkg_add curl node bash git
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+          run: |
+            . $HOME/.profile
+            . "$HOME/.cargo/env"
+            cargo build --release
+            ./script/fetch-fixtures
+            cargo test
+
+  netbsd:
+    runs-on: macos-12
+    name: netbsd-x86_64 (x86_64-unknown-netbsd)
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build & Test on NetBSD
+        uses: vmactions/netbsd-vm@v0.1.0
+        with:
+          usesh: true
+          mem: 2048
+          copyback: false
+          prepare: |
+            pkg_add curl nodejs bash git
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+          run: |
+            . $HOME/.profile
+            . "$HOME/.cargo/env"
+            cargo build --release
+            ./script/fetch-fixtures
+            cargo test
+
+  dragonflybsd:
+    runs-on: macos-12
+    name: dragonflybsd-x86_64 (x86_64-unknown-dragonflybsd)
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build & Test on DragonflyBSD
+        uses: vmactions/dragonflybsd-vm@v0.0.7
+        with:
+          usesh: true
+          mem: 2048
+          copyback: false
+          prepare: |
+            pkg install -y curl node18 bash git libnghttp2 rust
+          run: |
+            cargo build --release
+            ./script/fetch-fixtures
+            cargo test

@@ -68,6 +68,13 @@ jobs:
     with:
       ref: ${{ needs.init.outputs.ref }}
 
+  bsd:
+    name: Build & Test (BSDs)
+    needs: [init, fast_checks]
+    uses: ./.github/workflows/bsd.yml
+    with:
+      ref: ${{ needs.init.outputs.ref }}
+
   release:
     name: Release
     needs: [init, fast_checks, full_checks, min_version, build, sanitize]
