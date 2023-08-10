@@ -57,9 +57,12 @@ pub fn serve(grammar_path: &Path, open_in_browser: bool) -> Result<()> {
     let url = format!("http://{}", server.server_addr());
     println!("Started playground on: {}", url);
     if open_in_browser {
+        #[cfg(not(any(target_os = "dragonfly", target_os = "illumos", target_os = "solaris")))]
         if let Err(_) = webbrowser::open(&url) {
-            eprintln!("Failed to open '{}' in a web browser", url);
+            eprintln!("Failed to open '{url}' in a web browser");
         }
+        #[cfg(any(target_os = "dragonfly", target_os = "illumos", target_os = "solaris"))]
+        eprintln!("This platform does not support automatically opening the playground in a web browser. Please open '{url}' manually.");
     }
 
     let tree_sitter_dir = env::var("TREE_SITTER_BASE_DIR").map(PathBuf::from).ok();
