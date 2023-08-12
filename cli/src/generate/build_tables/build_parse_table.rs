@@ -76,6 +76,7 @@ impl<'a> ParseTableBuilder<'a> {
             item_set_builder,
             variable_info,
             non_terminal_extra_states: Vec::new(),
+            actual_conflicts: syntax_grammar.expected_conflicts.iter().cloned().collect(),
             state_ids_by_item_set: IndexMap::default(),
             core_ids_by_core: HashMap::new(),
             parse_state_info_by_id: Vec::new(),
