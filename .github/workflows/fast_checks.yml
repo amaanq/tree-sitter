@@ -9,23 +9,21 @@ on:
 
 jobs:
   check_rust_formatting:
-    name: Check Rust formating
+    name: Check Rust formatting
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
 
-    - name: Checkout source code
-      uses: actions/checkout@v3
-
-    - name: Run cargo fmt
-      run: cargo fmt -- --check
+      - name: Run cargo fmt
+        run: cargo fmt -- --check
 
   check_c_warnings:
     name: Check C warnings
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
 
-    - name: Checkout source code
-      uses: actions/checkout@v3
-
-    - name: Make C library to check that it's able to compile without warnings
-      run: make -j CFLAGS="-Werror"
+      - name: Make C library to check that it's able to compile without warnings
+        run: make -j CFLAGS="-Werror"
