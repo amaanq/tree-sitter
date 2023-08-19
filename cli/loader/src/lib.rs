@@ -8,7 +8,7 @@ use std::io::BufReader;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::SystemTime;
 use std::{env, fs, mem};
 use tree_sitter::{Language, QueryError, QueryErrorKind};
@@ -75,6 +75,7 @@ const DYLIB_EXTENSION: &'static str = "dll";
 
 const BUILD_TARGET: &'static str = env!("BUILD_TARGET");
 
+#[derive(Clone)]
 pub struct LanguageConfiguration<'a> {
     pub scope: Option<String>,
     pub content_regex: Option<Regex>,
@@ -87,18 +88,22 @@ pub struct LanguageConfiguration<'a> {
     pub locals_filenames: Option<Vec<String>>,
     pub tags_filenames: Option<Vec<String>>,
     pub language_name: String,
-    language_id: usize,
+    pub language_id: usize,
     highlight_config: OnceCell<Option<HighlightConfiguration>>,
     tags_config: OnceCell<Option<TagsConfiguration>>,
     highlight_names: &'a Mutex<Vec<String>>,
     use_all_highlight_names: bool,
 }
 
+pub struct Languages {
+    pub configurations: Vec<LanguageConfiguration<'static>>,
+    pub by_id: Vec<(PathBuf, OnceCell<Language>)>,
+    pub configuration_ids_by_file_type: HashMap<String, Vec<usize>>,
+}
+
 pub struct Loader {
     parser_lib_path: PathBuf,
-    languages_by_id: Vec<(PathBuf, OnceCell<Language>)>,
-    language_configurations: Vec<LanguageConfiguration<'static>>,
-    language_configuration_ids_by_file_type: HashMap<String, Vec<usize>>,
+    pub languages: Arc<RwLock<Languages>>,
     highlight_names: Box<Mutex<Vec<String>>>,
     use_all_highlight_names: bool,
     debug_build: bool,
@@ -122,9 +127,11 @@ impl Loader {
     pub fn with_parser_lib_path(parser_lib_path: PathBuf) -> Self {
         Loader {
             parser_lib_path,
-            languages_by_id: Vec::new(),
-            language_configurations: Vec::new(),
-            language_configuration_ids_by_file_type: HashMap::new(),
+            languages: Arc::new(RwLock::new(Languages {
+                by_id: Vec::new(),
+                configurations: Vec::new(),
+                configuration_ids_by_file_type: HashMap::new(),
+            })),
             highlight_names: Box::new(Mutex::new(Vec::new())),
             use_all_highlight_names: true,
             debug_build: false,
@@ -185,21 +192,24 @@ impl Loader {
         }
     }
 
-    pub fn get_all_language_configurations(&self) -> Vec<(&LanguageConfiguration, &Path)> {
-        self.language_configurations
-            .iter()
-            .map(|c| (c, self.languages_by_id[c.language_id].0.as_ref()))
-            .collect()
-    }
+    // pub fn get_all_language_configurations(&self) -> Vec<(&LanguageConfiguration, &Path)> {
+    //     let languages = self.languages.lock().unwrap();
+    //     languages
+    //         .configurations
+    //         .iter()
+    //         .map(|c| (c, languages.by_id[c.language_id].0.as_ref()))
+    //         .collect()
+    // }
 
     pub fn language_configuration_for_scope(
         &self,
         scope: &str,
-    ) -> Result<Option<(Language, &LanguageConfiguration)>> {
-        for configuration in &self.language_configurations {
+    ) -> Result<Option<(Language, LanguageConfiguration)>> {
+        let languages = self.languages.read().unwrap();
+        for configuration in &languages.configurations {
             if configuration.scope.as_ref().map_or(false, |s| s == scope) {
                 let language = self.language_for_id(configuration.language_id)?;
-                return Ok(Some((language, configuration)));
+                return Ok(Some((language, configuration.clone())));
             }
         }
         Ok(None)
@@ -208,28 +218,41 @@ impl Loader {
     pub fn language_configuration_for_file_name(
         &self,
         path: &Path,
-    ) -> Result<Option<(Language, &LanguageConfiguration)>> {
+    ) -> Result<Option<(Language, LanguageConfiguration)>> {
         // Find all the language configurations that match this file name
         // or a suffix of the file name.
         let configuration_ids = path
             .file_name()
             .and_then(|n| n.to_str())
-            .and_then(|file_name| self.language_configuration_ids_by_file_type.get(file_name))
+            .and_then(|file_name| {
+                self.languages
+                    .read()
+                    .unwrap()
+                    .configuration_ids_by_file_type
+                    .get(file_name)
+                    .cloned()
+            })
             .or_else(|| {
                 path.extension()
                     .and_then(|extension| extension.to_str())
                     .and_then(|extension| {
-                        self.language_configuration_ids_by_file_type.get(extension)
+                        self.languages
+                            .read()
+                            .unwrap()
+                            .configuration_ids_by_file_type
+                            .get(extension)
+                            .cloned()
                     })
             });
 
         if let Some(configuration_ids) = configuration_ids {
             if !configuration_ids.is_empty() {
                 let configuration;
+                let languages = self.languages.read().unwrap();
 
                 // If there is only one language configuration, then use it.
                 if configuration_ids.len() == 1 {
-                    configuration = &self.language_configurations[configuration_ids[0]];
+                    configuration = &languages.configurations[configuration_ids[0]];
                 }
                 // If multiple language configurations match, then determine which
                 // one to use by applying the configurations' content regexes.
@@ -240,7 +263,7 @@ impl Loader {
                     let mut best_score = -2isize;
                     let mut best_configuration_id = None;
                     for configuration_id in configuration_ids {
-                        let config = &self.language_configurations[*configuration_id];
+                        let config = &languages.configurations[configuration_id];
 
                         // If the language configuration has a content regex, assign
                         // a score based on the length of the first match.
@@ -260,16 +283,16 @@ impl Loader {
                             score = 0;
                         }
                         if score > best_score {
-                            best_configuration_id = Some(*configuration_id);
+                            best_configuration_id = Some(configuration_id);
                             best_score = score;
                         }
                     }
 
-                    configuration = &self.language_configurations[best_configuration_id.unwrap()];
+                    configuration = &languages.configurations[best_configuration_id.unwrap()];
                 }
 
                 let language = self.language_for_id(configuration.language_id)?;
-                return Ok(Some((language, configuration)));
+                return Ok(Some((language, configuration.clone())));
             }
         }
 
@@ -279,10 +302,17 @@ impl Loader {
     pub fn language_configuration_for_injection_string(
         &self,
         string: &str,
-    ) -> Result<Option<(Language, &LanguageConfiguration)>> {
+    ) -> Result<Option<(Language, LanguageConfiguration)>> {
         let mut best_match_length = 0;
         let mut best_match_position = None;
-        for (i, configuration) in self.language_configurations.iter().enumerate() {
+        for (i, configuration) in self
+            .languages
+            .read()
+            .unwrap()
+            .configurations
+            .iter()
+            .enumerate()
+        {
             if let Some(injection_regex) = &configuration.injection_regex {
                 if let Some(mat) = injection_regex.find(string) {
                     let length = mat.end() - mat.start();
@@ -295,16 +325,16 @@ impl Loader {
         }
 
         if let Some(i) = best_match_position {
-            let configuration = &self.language_configurations[i];
+            let configuration = &self.languages.read().unwrap().configurations[i];
             let language = self.language_for_id(configuration.language_id)?;
-            Ok(Some((language, configuration)))
+            Ok(Some((language, configuration.clone())))
         } else {
             Ok(None)
         }
     }
 
     fn language_for_id(&self, id: usize) -> Result<Language> {
-        let (path, language) = &self.languages_by_id[id];
+        let (path, language) = &self.languages.read().unwrap().by_id[id];
         language
             .get_or_try_init(|| {
                 let src_path = path.join("src");
@@ -364,6 +394,7 @@ impl Loader {
             .with_context(|| "Failed to compare source and binary timestamps")?;
 
         if recompile {
+            let _lock = self.recompiling.lock().unwrap();
             fs::create_dir_all(&self.parser_lib_path)?;
             let mut config = cc::Build::new();
             config
@@ -482,11 +513,11 @@ impl Loader {
         Ok(language)
     }
 
-    pub fn highlight_config_for_injection_string<'a>(
-        &'a self,
+    pub fn highlight_config_for_injection_string(
+        &self,
         string: &str,
         apply_all_captures: bool,
-    ) -> Option<&'a HighlightConfiguration> {
+    ) -> Option<HighlightConfiguration> {
         match self.language_configuration_for_injection_string(string) {
             Err(e) => {
                 eprintln!(
@@ -506,16 +537,16 @@ impl Loader {
                         None
                     }
                     Ok(None) => None,
-                    Ok(Some(config)) => Some(config),
+                    Ok(Some(config)) => Some(config.clone()),
                 }
             }
         }
     }
 
     pub fn find_language_configurations_at_path<'a>(
-        &'a mut self,
+        &'a self,
         parser_path: &Path,
-    ) -> Result<&[LanguageConfiguration]> {
+    ) -> Result<Vec<LanguageConfiguration>> {
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum PathsJSON {
@@ -575,12 +606,13 @@ impl Loader {
             name: String,
         }
 
-        let initial_language_configuration_count = self.language_configurations.len();
+        let initial_language_configuration_count =
+            self.languages.read().unwrap().configurations.len();
 
         if let Ok(package_json_contents) = fs::read_to_string(&parser_path.join("package.json")) {
             let package_json = serde_json::from_str::<PackageJSON>(&package_json_contents);
             if let Ok(package_json) = package_json {
-                let language_count = self.languages_by_id.len();
+                let language_count = self.languages.read().unwrap().by_id.len();
                 for config_json in package_json.tree_sitter {
                     // Determine the path to the parser directory. This can be specified in
                     // the package.json, but defaults to the directory containing the package.json.
@@ -596,8 +628,14 @@ impl Loader {
                     // Determine if a previous language configuration in this package.json file
                     // already uses the same language.
                     let mut language_id = None;
-                    for (id, (path, _)) in
-                        self.languages_by_id.iter().enumerate().skip(language_count)
+                    for (id, (path, _)) in self
+                        .languages
+                        .read()
+                        .unwrap()
+                        .by_id
+                        .iter()
+                        .enumerate()
+                        .skip(language_count)
                     {
                         if language_path == *path {
                             language_id = Some(id);
@@ -606,8 +644,12 @@ impl Loader {
 
                     // If not, add a new language path to the list.
                     let language_id = language_id.unwrap_or_else(|| {
-                        self.languages_by_id.push((language_path, OnceCell::new()));
-                        self.languages_by_id.len() - 1
+                        self.languages
+                            .write()
+                            .unwrap()
+                            .by_id
+                            .push((language_path.to_owned(), OnceCell::new()));
+                        self.languages.read().unwrap().by_id.len() - 1
                     });
 
                     let configuration = LanguageConfiguration {
@@ -630,19 +672,28 @@ impl Loader {
                     };
 
                     for file_type in &configuration.file_types {
-                        self.language_configuration_ids_by_file_type
+                        let language_config_len =
+                            self.languages.read().unwrap().configurations.len();
+                        self.languages
+                            .write()
+                            .unwrap()
+                            .configuration_ids_by_file_type
                             .entry(file_type.to_string())
                             .or_insert(Vec::new())
-                            .push(self.language_configurations.len());
+                            .push(language_config_len);
                     }
 
-                    self.language_configurations
+                    self.languages
+                        .write()
+                        .unwrap()
+                        .configurations
                         .push(unsafe { mem::transmute(configuration) });
                 }
             }
         }
 
-        if self.language_configurations.len() == initial_language_configuration_count
+        if self.languages.read().unwrap().configurations.len()
+            == initial_language_configuration_count
             && parser_path.join("src").join("grammar.json").exists()
         {
             let grammar_path = parser_path.join("src").join("grammar.json");
@@ -654,7 +705,7 @@ impl Loader {
             let configuration = LanguageConfiguration {
                 root_path: parser_path.to_owned(),
                 language_name: grammar_json.name,
-                language_id: self.languages_by_id.len(),
+                language_id: self.languages.read().unwrap().by_id.len(),
                 file_types: Vec::new(),
                 scope: None,
                 content_regex: None,
@@ -669,13 +720,22 @@ impl Loader {
                 highlight_names: &*self.highlight_names,
                 use_all_highlight_names: self.use_all_highlight_names,
             };
-            self.language_configurations
+            self.languages
+                .write()
+                .unwrap()
+                .configurations
                 .push(unsafe { mem::transmute(configuration) });
-            self.languages_by_id
+            self.languages
+                .write()
+                .unwrap()
+                .by_id
                 .push((parser_path.to_owned(), OnceCell::new()));
         }
 
-        Ok(&self.language_configurations[initial_language_configuration_count..])
+        Ok(
+            self.languages.read().unwrap().configurations[initial_language_configuration_count..]
+                .to_owned(),
+        )
     }
 
     fn regex(pattern: Option<String>) -> Option<Regex> {
@@ -730,7 +790,7 @@ impl<'a> LanguageConfiguration<'a> {
         language: Language,
         apply_all_captures: bool,
         paths: Option<&[String]>,
-    ) -> Result<Option<&HighlightConfiguration>> {
+    ) -> Result<Option<Arc<HighlightConfiguration>>> {
         let (highlights_filenames, injections_filenames, locals_filenames) = match paths {
             Some(paths) => (
                 Some(
@@ -832,13 +892,13 @@ impl<'a> LanguageConfiguration<'a> {
                         }
                     }
                     result.configure(&all_highlight_names.as_slice());
-                    Ok(Some(result))
+                    Ok(Some(Arc::new(result)))
                 }
             })
-            .map(Option::as_ref);
+            .map(|h| h.as_ref().map(|h| h.clone()));
     }
 
-    pub fn tags_config(&self, language: Language) -> Result<Option<&TagsConfiguration>> {
+    pub fn tags_config(&self, language: Language) -> Result<Option<Arc<TagsConfiguration>>> {
         self.tags_config
             .get_or_try_init(|| {
                 let (tags_query, tags_ranges) =
@@ -849,7 +909,7 @@ impl<'a> LanguageConfiguration<'a> {
                     Ok(None)
                 } else {
                     TagsConfiguration::new(language, &tags_query, &locals_query)
-                        .map(Some)
+                        .map(|t| Some(Arc::new(t)))
                         .map_err(|error| {
                             if let TagsError::Query(error) = error {
                                 if error.offset < locals_query.len() {
@@ -874,7 +934,13 @@ impl<'a> LanguageConfiguration<'a> {
                         })
                 }
             })
-            .map(Option::as_ref)
+            .map(|x| {
+                if x.is_some() {
+                    Some(x.clone().unwrap())
+                } else {
+                    None
+                }
+            })
     }
 
     fn include_path_in_query_error<'b>(

@@ -110,7 +110,7 @@ pub struct TreeCursor<'cursor>(ffi::TSTreeCursor, PhantomData<&'cursor ()>);
 
 /// A set of patterns that match nodes in a syntax tree.
 #[doc(alias = "TSQuery")]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Query {
     ptr: NonNull<ffi::TSQuery>,
     capture_names: Vec<String>,
@@ -151,21 +151,21 @@ pub struct QueryCursor {
 }
 
 /// A key-value pair associated with a particular pattern in a `Query`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryProperty {
     pub key: Box<str>,
     pub value: Option<Box<str>>,
     pub capture_id: Option<usize>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryPredicateArg {
     Capture(u32),
     String(Box<str>),
 }
 
 /// A key-value pair associated with a particular pattern in a `Query`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryPredicate {
     pub operator: Box<str>,
     pub args: Vec<QueryPredicateArg>,
@@ -246,7 +246,7 @@ pub enum QueryErrorKind {
     Language,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TextPredicate {
     CaptureEqString(u32, String, bool),
     CaptureEqCapture(u32, u32, bool),

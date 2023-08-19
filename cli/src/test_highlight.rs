@@ -212,7 +212,9 @@ pub fn get_highlight_positions(
     let source = String::from_utf8_lossy(source);
     let mut char_indices = source.char_indices();
     for event in highlighter.highlight(highlight_config, source.as_bytes(), None, |string| {
-        loader.highlight_config_for_injection_string(string, highlight_config.apply_all_captures)
+        loader
+            .highlight_config_for_injection_string(string, highlight_config.apply_all_captures)
+            .as_ref()
     })? {
         match event? {
             HighlightEvent::HighlightStart(h) => highlight_stack.push(h),

@@ -18,7 +18,7 @@ const CANCELLATION_CHECK_INTERVAL: usize = 100;
 
 /// Contains the data needed to compute tags for code written in a
 /// particular language.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TagsConfiguration {
     pub language: Language,
     pub query: Query,
@@ -34,7 +34,7 @@ pub struct TagsConfiguration {
     pattern_info: Vec<PatternInfo>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct NamedCapture {
     pub syntax_type_id: u32,
     pub is_definition: bool,
@@ -71,7 +71,7 @@ pub enum Error {
     InvalidCapture(String),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 struct PatternInfo {
     docs_adjacent_capture: Option<u32>,
     local_scope_inherits: bool,

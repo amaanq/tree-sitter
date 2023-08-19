@@ -14,7 +14,7 @@ pub struct Edit {
     pub inserted_text: Vec<u8>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Stats {
     pub successful_parses: usize,
     pub total_parses: usize,
