@@ -1,6 +1,9 @@
-use lazy_static::lazy_static;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
+
+use anyhow::Context;
+use lazy_static::lazy_static;
+
 use tree_sitter::Language;
 use tree_sitter_highlight::HighlightConfiguration;
 use tree_sitter_loader::Loader;
@@ -86,9 +89,17 @@ pub fn get_test_language(name: &str, parser_code: &str, path: Option<&Path>) -> 
             None
         }
     });
-    TEST_LOADER
-        .load_language_from_sources(name, &HEADER_DIR, &parser_c_path, &scanner_path)
-        .unwrap()
+    let res =
+        TEST_LOADER.load_language_from_sources(name, &HEADER_DIR, &parser_c_path, &scanner_path);
+    if res.is_err() {
+        let lock_file = parser_c_path.parent().unwrap().join(".tscache");
+        if lock_file.exists() {
+            fs::remove_file(&lock_file)
+                .with_context(|| format!("Failed to remove lock file {:?}", &lock_file))
+                .unwrap();
+        }
+    }
+    res.unwrap()
 }
 
 pub fn get_test_grammar(name: &str) -> (String, Option<PathBuf>) {

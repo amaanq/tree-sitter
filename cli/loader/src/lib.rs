@@ -337,12 +337,20 @@ impl Loader {
             }
         };
 
-        self.load_language_from_sources(
+        let res = self.load_language_from_sources(
             &grammar_json.name,
             &header_path,
             &parser_path,
             &scanner_path,
-        )
+        );
+        if res.is_err() {
+            let lock_file = parser_path.parent().unwrap().join(".tscache");
+            if lock_file.exists() {
+                fs::remove_file(&lock_file)
+                    .with_context(|| format!("Failed to remove lock file {:?}", &lock_file))?;
+            }
+        }
+        res
     }
 
     pub fn load_language_from_sources(
@@ -362,7 +370,10 @@ impl Loader {
         let recompile = needs_recompile(&library_path, &parser_path, &scanner_path)
             .with_context(|| "Failed to compare source and binary timestamps")?;
 
-        if recompile {
+        if recompile && !parser_path.parent().unwrap().join(".tscache").exists() {
+            let lock_file = parser_path.parent().unwrap().join(".tscache");
+            fs::File::create(&lock_file)
+                .with_context(|| format!("Failed to create lock file {:?}", &lock_file))?;
             fs::create_dir_all(&self.parser_lib_path)?;
             let mut config = cc::Build::new();
             config
@@ -435,6 +446,13 @@ impl Loader {
                     String::from_utf8_lossy(&output.stdout),
                     String::from_utf8_lossy(&output.stderr)
                 ));
+            }
+
+            fs::remove_file(&lock_file)
+                .with_context(|| format!("Failed to remove lock file {:?}", &lock_file))?;
+        } else if parser_path.parent().unwrap().join(".tscache").exists() {
+            while parser_path.parent().unwrap().join(".tscache").exists() {
+                std::thread::sleep(std::time::Duration::from_millis(50));
             }
         }
 
