@@ -89,7 +89,6 @@ pub struct LanguageConfiguration<'a> {
     pub locals_filenames: Option<Vec<String>>,
     pub tags_filenames: Option<Vec<String>>,
     pub language_name: String,
-    pub external_files: Option<Vec<String>>,
     language_id: usize,
     highlight_config: OnceCell<Option<HighlightConfiguration>>,
     tags_config: OnceCell<Option<TagsConfiguration>>,
@@ -348,7 +347,7 @@ impl Loader {
             }
         };
 
-        let external_files = if let Some(external_files) = external_files {
+        let external_scanner_files = if let Some(external_files) = external_files {
             let mut files = Vec::new();
             for path in external_files {
                 files.push(src_path.join(path));
@@ -358,12 +357,23 @@ impl Loader {
             Vec::new()
         };
 
+        #[cfg(not(windows))]
+        let needs_recompile = needs_recompile(
+            &self.parser_lib_path.join(&grammar_json.name),
+            &parser_path,
+            scanner_path.as_deref(),
+            &external_scanner_files,
+        )?;
+
+        #[cfg(windows)]
+        let needs_recompile = false;
+
         self.load_language_from_sources(
             &grammar_json.name,
             header_path,
             &parser_path,
             scanner_path.as_deref(),
-            &external_files,
+            needs_recompile,
         )
     }
 
@@ -373,7 +383,7 @@ impl Loader {
         header_path: &Path,
         parser_path: &Path,
         scanner_path: Option<&Path>,
-        external_files: &[PathBuf],
+        needs_recompile: bool,
     ) -> Result<Language> {
         let mut lib_name = name.to_string();
         if self.debug_build {
@@ -382,10 +392,7 @@ impl Loader {
         let mut library_path = self.parser_lib_path.join(lib_name);
         library_path.set_extension(DYLIB_EXTENSION);
 
-        let recompile = needs_recompile(&library_path, parser_path, scanner_path, external_files)
-            .with_context(|| "Failed to compare source and binary timestamps")?;
-
-        if recompile {
+        if needs_recompile {
             fs::create_dir_all(&self.parser_lib_path)?;
             let mut config = cc::Build::new();
             config
@@ -579,7 +586,7 @@ impl Loader {
             locals: PathsJSON,
             #[serde(default)]
             tags: PathsJSON,
-            #[serde(default)]
+            #[serde(rename = "external-files")]
             external_files: PathsJSON,
         }
 
@@ -646,7 +653,6 @@ impl Loader {
                         injections_filenames: config_json.injections.into_vec(),
                         locals_filenames: config_json.locals.into_vec(),
                         tags_filenames: config_json.tags.into_vec(),
-                        external_files: config_json.external_files.into_vec(),
                         highlights_filenames: config_json.highlights.into_vec(),
                         highlight_config: OnceCell::new(),
                         tags_config: OnceCell::new(),
@@ -696,7 +702,6 @@ impl Loader {
                 locals_filenames: None,
                 highlights_filenames: None,
                 tags_filenames: None,
-                external_files: None,
                 highlight_config: OnceCell::new(),
                 tags_config: OnceCell::new(),
                 highlight_names: &self.highlight_names,
