@@ -482,6 +482,19 @@ impl Loader {
         Ok(language)
     }
 
+    pub fn load_language_from_parser(&self, name: &str, parser_path: &PathBuf) -> Result<Language> {
+        let library = unsafe { Library::new(parser_path) }.unwrap();
+        let language_fn_name = format!("tree_sitter_{}", replace_dashes_with_underscores(name));
+        let language = unsafe {
+            let language_fn: Symbol<unsafe extern "C" fn() -> Language> = library
+                .get(language_fn_name.as_bytes())
+                .with_context(|| format!("Failed to load symbol {language_fn_name}"))?;
+            language_fn()
+        };
+        mem::forget(library);
+        Ok(language)
+    }
+
     pub fn highlight_config_for_injection_string<'a>(
         &'a self,
         string: &str,

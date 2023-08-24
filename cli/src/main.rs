@@ -239,6 +239,50 @@ fn run() -> Result<()> {
                         .short("u")
                         .help("Update all syntax trees in corpus files with current parser output"),
                 )
+                .arg(
+                    Arg::with_name("language")
+                    .long("language")
+                    .short("l")
+                    .takes_value(true)
+                    .help("Specify the language if a parser path not managed by the cli is provided")
+                )
+                .arg(
+                    Arg::with_name("parser-path")
+                    .long("parser-path")
+                    .short("p")
+                    .takes_value(true)
+                    .help("Specify the path to a parser if it's not managed by the cli")
+                )
+                .arg(
+                    Arg::with_name("query-paths")
+                        .help("Specify the paths to files with queries")
+                        .long("query-paths")
+                        .takes_value(true)
+                        .multiple(true)
+                        .number_of_values(1),
+                )
+                .arg(
+                    Arg::with_name("highlights-paths")
+                        .help("Specify the paths to files with highlight tests")
+                        .long("highlights-paths")
+                        .takes_value(true)
+                        .multiple(true)
+                        .number_of_values(1),
+                )
+                .arg(
+                    Arg::with_name("tags-paths")
+                        .help("Specify the paths to files with tags tests")
+                        .long("tags-path")
+                        .takes_value(true)
+                        .multiple(true)
+                        .number_of_values(1),
+                )
+                .arg(
+                    Arg::with_name("test-dir")
+                        .help("Specify the path to files with tests")
+                        .long("test-dir")
+                        .takes_value(true)
+                )
                 .arg(&debug_arg)
                 .arg(&debug_build_arg)
                 .arg(&debug_graph_arg)
@@ -384,6 +428,18 @@ fn run() -> Result<()> {
             let update = matches.is_present("update");
             let filter = matches.value_of("filter");
             let apply_all_captures = matches.is_present("apply-all-captures");
+            let language_name = matches.value_of("language");
+            let parser_path = matches.value_of("parser-path");
+            let query_paths = matches
+                .values_of("query-paths")
+                .map_or(Vec::new(), |e| e.collect::<Vec<_>>());
+            let highlight_paths = matches
+                .values_of("highlights-paths")
+                .map_or(None, |e| Some(e.collect::<Vec<_>>()));
+            let tags_paths = matches
+                .values_of("tags-paths")
+                .map_or(None, |e| Some(e.collect::<Vec<_>>()));
+            let test_dir = matches.value_of("test-dir");
 
             if debug {
                 // For augmenting debug logging in external scanners
@@ -392,40 +448,122 @@ fn run() -> Result<()> {
 
             loader.use_debug_build(debug_build);
 
-            let languages = loader.languages_at_path(&current_dir)?;
-            let language = languages
-                .first()
-                .ok_or_else(|| anyhow!("No language found"))?;
-            let test_dir = current_dir.join("test");
-
-            // Run the corpus tests. Look for them at two paths: `test/corpus` and `corpus`.
-            let mut test_corpus_dir = test_dir.join("corpus");
-            if !test_corpus_dir.is_dir() {
-                test_corpus_dir = current_dir.join("corpus");
+            if parser_path.is_some() && language_name.is_none() {
+                return Err(anyhow!(
+                    "You must specify a language name when providing a custom parser path"
+                ));
             }
-            if test_corpus_dir.is_dir() {
-                test::run_tests_at_path(
-                    *language,
-                    &test_corpus_dir,
-                    debug,
-                    debug_graph,
-                    filter,
-                    update,
+
+            if let (Some(language_name), Some(parser_path)) = (language_name, parser_path) {
+                let language = loader.load_language_from_parser(
+                    language_name,
+                    &Path::new(parser_path).to_path_buf(),
                 )?;
-            }
 
-            // Check that all of the queries are valid.
-            test::check_queries_at_path(*language, &current_dir.join("queries"))?;
+                let test_dir = test_dir.map(|x| {
+                    let test_dir = Path::new(x);
+                    if test_dir.is_dir() {
+                        Some(test_dir.to_path_buf())
+                    } else {
+                        // check test_dir/corpus
+                        let test_corpus_dir = test_dir.join("corpus");
+                        if test_corpus_dir.is_dir() {
+                            Some(test_corpus_dir)
+                        } else {
+                            None
+                        }
+                    }
+                });
 
-            // Run the syntax highlighting tests.
-            let test_highlight_dir = test_dir.join("highlight");
-            if test_highlight_dir.is_dir() {
-                test_highlight::test_highlights(&loader, &test_highlight_dir, apply_all_captures)?;
-            }
+                if let Some(test_dir) = test_dir {
+                    match test_dir {
+                        Some(dir) => test::run_tests_at_path(
+                            language,
+                            dir.as_ref(),
+                            debug,
+                            debug_graph,
+                            filter,
+                            update,
+                        )?,
+                        None => eprintln!("Warning: no test directory found"),
+                    }
+                }
 
-            let test_tag_dir = test_dir.join("tags");
-            if test_tag_dir.is_dir() {
-                test_tags::test_tags(&loader, &test_tag_dir)?;
+                for query_path in query_paths {
+                    test::check_queries_at_path(language, Path::new(query_path))?;
+                }
+
+                println!("  ✓ All queries for {language_name} are valid.");
+
+                if let Some(highlight_paths) = highlight_paths {
+                    for highlight_path in highlight_paths {
+                        let path = Path::new(highlight_path);
+                        if !path.is_dir() || !path.exists() {
+                            eprintln!(
+                                "Highlights path is not a valid directory: {}",
+                                path.display()
+                            );
+                            continue;
+                        }
+                        test_highlight::test_highlights(
+                            &loader,
+                            Path::new(highlight_path),
+                            apply_all_captures,
+                        )?;
+                    }
+                }
+
+                if let Some(tags_paths) = tags_paths {
+                    for tags_path in tags_paths {
+                        let path = Path::new(tags_path);
+                        if !path.is_dir() || !path.exists() {
+                            eprintln!("Tags path is not a valid directory: {}", path.display());
+                            continue;
+                        }
+                        test_tags::test_tags(&loader, Path::new(tags_path))?;
+                    }
+                }
+            } else {
+                let languages = loader.languages_at_path(&current_dir)?;
+                let language = languages
+                    .first()
+                    .ok_or_else(|| anyhow!("No language found"))?;
+                let test_dir = current_dir.join("test");
+
+                // Run the corpus tests. Look for them at two paths: `test/corpus` and `corpus`.
+                let mut test_corpus_dir = test_dir.join("corpus");
+                if !test_corpus_dir.is_dir() {
+                    test_corpus_dir = current_dir.join("corpus");
+                }
+                if test_corpus_dir.is_dir() {
+                    test::run_tests_at_path(
+                        *language,
+                        &test_corpus_dir,
+                        debug,
+                        debug_graph,
+                        filter,
+                        update,
+                    )?;
+                }
+
+                // Check that all of the queries are valid.
+                test::check_queries_at_path(*language, &current_dir.join("queries"))?;
+                println!("  ✓ All queries are valid.");
+
+                // Run the syntax highlighting tests.
+                let test_highlight_dir = test_dir.join("highlight");
+                if test_highlight_dir.is_dir() {
+                    test_highlight::test_highlights(
+                        &loader,
+                        &test_highlight_dir,
+                        apply_all_captures,
+                    )?;
+                }
+
+                let test_tag_dir = test_dir.join("tags");
+                if test_tag_dir.is_dir() {
+                    test_tags::test_tags(&loader, &test_tag_dir)?;
+                }
             }
         }
 
