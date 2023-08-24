@@ -62,6 +62,7 @@ pub struct SExpressionFlags {
     pub text: TextFlags,
     pub extra: ExtraFlags,
     show_positions: bool,
+    condensed: bool,
     one_line: bool,
 }
 
@@ -71,6 +72,7 @@ impl Default for SExpressionFlags {
             text: Default::default(),
             extra: Default::default(),
             show_positions: true,
+            condensed: false,
             one_line: false,
         }
     }
@@ -79,6 +81,8 @@ impl Default for SExpressionFlags {
 impl SExpressionFlags {
     fn match_flag(&mut self, flag: char) -> bool {
         match flag {
+            'C' => self.condensed = false,
+            'c' => self.condensed = true,
             'O' => self.one_line = false,
             'o' => self.one_line = true,
             'P' => self.show_positions = false,
@@ -315,10 +319,10 @@ impl<W: Write> Visitor for SExpressionRenderer<'_, W> {
     fn on_visit(&mut self, context: &mut Context) -> Result {
         if context.node().is_named() || self.show_all() {
             if context.traversed() {
-                self.close_brace()?;
+                self.close_brace(context)?;
             } else {
-                self.lf()?;
-                self.indent()?;
+                self.lf(context)?;
+                self.indent(context)?;
                 self.node(context)?;
             }
         }
@@ -343,8 +347,9 @@ impl<'a, W: Write> SExpressionRenderer<'a, W> {
     }
 
     #[inline(always)]
-    fn indent(&mut self) -> Result {
-        if self.flags.one_line {
+    fn indent(&mut self, context: &Context) -> Result {
+        if self.flags.one_line || (self.flags.condensed && context.node().named_child_count() == 0)
+        {
             self.stdout.write_all(b" ")?;
         } else {
             self.stdout.write_all(&b"  ".repeat(self.indent_level))?;
@@ -377,14 +382,19 @@ impl<'a, W: Write> SExpressionRenderer<'a, W> {
     }
 
     #[inline(always)]
-    fn close_brace(&mut self) -> Result {
+    fn close_brace(&mut self, _context: &Context) -> Result {
         self.stdout.write_all(b")")?;
         Ok(())
     }
 
     #[inline(always)]
-    fn lf(&mut self) -> Result {
+    fn lf(&mut self, context: &Context) -> Result {
         if !self.flags.one_line {
+            if self.flags.condensed {
+                if context.node().named_child_count() == 0 {
+                    return Ok(());
+                }
+            }
             self.stdout.write_all(b"\n")?;
             if self.flags.extra.line_flush {
                 self.stdout.flush()?;
