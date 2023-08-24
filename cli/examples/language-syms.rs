@@ -377,8 +377,8 @@ mod identifier {
                     'b: {
                         if result.len() == 0 {
                             let Some(replacement) = replacement(c) else {
-                            break 'b
-                        };
+                                break 'b;
+                            };
                             result += replacement;
                             replaced = true;
                             break 'a;
@@ -389,8 +389,8 @@ mod identifier {
                 }
             } else {
                 let Some(replacement) = replacement(c) else {
-                continue;
-            };
+                    continue;
+                };
                 if !replaced && result.len() > 0 {
                     result.push('_');
                 }
