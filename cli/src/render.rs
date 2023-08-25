@@ -63,6 +63,7 @@ pub struct SExpressionFlags {
     pub extra: ExtraFlags,
     show_positions: bool,
     condensed: bool,
+    show_all: bool,
     one_line: bool,
 }
 
@@ -73,6 +74,7 @@ impl Default for SExpressionFlags {
             extra: Default::default(),
             show_positions: true,
             condensed: false,
+            show_all: false,
             one_line: false,
         }
     }
@@ -81,6 +83,8 @@ impl Default for SExpressionFlags {
 impl SExpressionFlags {
     fn match_flag(&mut self, flag: char) -> bool {
         match flag {
+            'A' => self.show_all = false,
+            'a' => self.show_all = true,
             'C' => self.condensed = false,
             'c' => self.condensed = true,
             'O' => self.one_line = false,
@@ -88,6 +92,9 @@ impl SExpressionFlags {
             'P' => self.show_positions = false,
             'p' => self.show_positions = true,
             _ => return false,
+        }
+        if self.condensed {
+            self.show_positions = false;
         }
         true
     }
@@ -317,7 +324,7 @@ impl<W: Write> Visitor for SExpressionRenderer<'_, W> {
 
     #[inline(always)]
     fn on_visit(&mut self, context: &mut Context) -> Result {
-        if context.node().is_named() || self.show_all() {
+        if context.node().is_named() || self.flags.show_all {
             if context.traversed() {
                 self.close_brace(context)?;
             } else {
@@ -363,27 +370,47 @@ impl<'a, W: Write> SExpressionRenderer<'a, W> {
             write!(self.stdout, "{}: ", field_name)?;
         }
         let node = context.node();
-        if self.flags.show_positions {
-            let start = node.start_position();
-            let end = node.end_position();
-            write!(
-                self.stdout,
-                "({} [{}, {}] - [{}, {}]",
-                node.kind(),
-                start.row,
-                start.column,
-                end.row,
-                end.column
-            )?;
+        if self.flags.show_all && !node.is_named() {
+            if self.flags.show_positions {
+                let start = node.start_position();
+                let end = node.end_position();
+                write!(
+                    self.stdout,
+                    "\"{}\" [{}, {}] - [{}, {}]",
+                    node.kind(),
+                    start.row,
+                    start.column,
+                    end.row,
+                    end.column
+                )?;
+            } else {
+                write!(self.stdout, "\"{}\"", node.kind())?;
+            }
         } else {
-            write!(self.stdout, "({}", node.kind())?;
+            if self.flags.show_positions {
+                let start = node.start_position();
+                let end = node.end_position();
+                write!(
+                    self.stdout,
+                    "({} [{}, {}] - [{}, {}]",
+                    node.kind(),
+                    start.row,
+                    start.column,
+                    end.row,
+                    end.column
+                )?;
+            } else {
+                write!(self.stdout, "({}", node.kind())?;
+            }
         }
         Ok(())
     }
 
     #[inline(always)]
-    fn close_brace(&mut self, _context: &Context) -> Result {
-        self.stdout.write_all(b")")?;
+    fn close_brace(&mut self, context: &Context) -> Result {
+        if !(self.flags.show_all && !context.node().is_named()) {
+            self.stdout.write_all(b")")?;
+        }
         Ok(())
     }
 
@@ -401,11 +428,6 @@ impl<'a, W: Write> SExpressionRenderer<'a, W> {
             }
         }
         Ok(())
-    }
-
-    #[inline(always)]
-    fn show_all(&self) -> bool {
-        false
     }
 }
 
