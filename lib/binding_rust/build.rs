@@ -51,6 +51,7 @@ fn main() {
         .flag_if_supported("-fvisibility=hidden")
         .flag_if_supported("-Wshadow")
         .flag_if_supported("-Wno-unused-parameter")
+        .define("TREE_SITTER_REUSE_ALLOCATOR", "")
         .include(&src_path)
         .include(&wasm_path)
         .include(&include_path)

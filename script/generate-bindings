@@ -40,4 +40,5 @@ bindgen                                        \
   $header_path                                 \
   --                                           \
   -D TREE_SITTER_FEATURE_WASM                  \
+  -D TREE_SITTER_REUSE_ALLOCATOR               \
   > $output_path
