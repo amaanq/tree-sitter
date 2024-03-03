@@ -99,13 +99,36 @@ pub fn generate_grammar_files(
             let package_json_main = package_json.get("main");
             let package_json_needs_update = package_json_main.map_or(true, |v| {
                 let main_string = v.as_str();
-                main_string == Some("index.js") || main_string == Some("./index.js")
+                main_string == Some("index.js")
+                    || main_string == Some("./index.js")
+                    || package_json
+                        .get("dependencies")
+                        .map_or(false, |d| d.get("nan").is_some())
             });
             if package_json_needs_update {
-                eprintln!("Updating package.json with new binding path");
-                package_json.insert(
-                    "main".to_string(),
-                    Value::String("bindings/node".to_string()),
+                if package_json
+                    .insert(
+                        "main".to_string(),
+                        Value::String("bindings/node".to_string()),
+                    )
+                    .is_some()
+                {
+                    eprintln!("Updating package.json with new binding path");
+                }
+                let dependencies = package_json
+                    .entry("dependencies".to_string())
+                    .or_insert_with(|| Value::Object(Map::new()));
+                if dependencies
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("nan")
+                    .is_some()
+                {
+                    eprintln!("Replacing package.json's nan dependency with node-addon-api");
+                }
+                dependencies.as_object_mut().unwrap().insert(
+                    "node-addon-api".to_string(),
+                    Value::String("^7.1.0".to_string()),
                 );
                 let mut package_json_str = serde_json::to_string_pretty(&package_json)?;
                 package_json_str.push('\n');
