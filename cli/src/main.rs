@@ -308,6 +308,10 @@ struct BuildWasm {
     pub docker: bool,
     #[arg(index = 1, num_args = 1.., help = "The path to output the wasm file")]
     pub path: Option<String>,
+    #[arg(long, help = "Compile with address sanitizer")]
+    pub asan: bool,
+    #[arg(long, help = "Compile with undefined behavior sanitizer")]
+    pub ubsan: bool,
 }
 
 #[derive(Args)]
@@ -777,6 +781,7 @@ fn run() -> Result<()> {
                 &grammar_path,
                 &current_dir,
                 wasm_options.docker,
+                (wasm_options.asan, wasm_options.ubsan),
             )?;
         }
 

@@ -437,6 +437,7 @@ impl Loader {
                         .and_then(|p| p.strip_prefix(src_path).ok()),
                     &library_path,
                     false,
+                    (false, false),
                 )?;
             }
 
@@ -709,6 +710,7 @@ impl Loader {
         scanner_filename: Option<&Path>,
         output_path: &Path,
         force_docker: bool,
+        sanitizers: (bool, bool),
     ) -> Result<(), Error> {
         #[derive(PartialEq, Eq)]
         enum EmccSource {
@@ -831,6 +833,14 @@ impl Loader {
             "-I",
             ".",
         ]);
+
+        if sanitizers.0 {
+            command.args(["-fsanitize=address", "-fno-omit-frame-pointer"]);
+        }
+
+        if sanitizers.1 {
+            command.args(["-fsanitize=undefined"]);
+        }
 
         if let Some(scanner_filename) = scanner_filename {
             if scanner_filename

@@ -23,7 +23,8 @@ OPTIONS
             and more runtime assertions.
   --docker: Run emscripten using docker, even if \`emcc\` is installed.
             By default, \`emcc\` will be run directly when available.
-
+  --asan:   Compile with address sanitizer.
+  --ubsan:  Compile with undefined behavior sanitizer.
 EOF
 }
 
@@ -36,7 +37,7 @@ minify_js=1
 force_docker=0
 emscripen_version=$(cat "$(dirname "$0")"/../cli/loader/emscripten-version)
 
-while [[ $# > 0 ]]; do
+while [[ $# -gt 0 ]]; do
   case "$1" in
     --debug)
       minify_js=0
@@ -54,6 +55,14 @@ while [[ $# > 0 ]]; do
 
     -v|--verbose)
       emscripten_flags="-s VERBOSE=1 -v $emscripten_flags"
+      ;;
+
+    --asan)
+      emscripten_flags="-fsanitize=address $emscripten_flags"
+      ;;
+
+    --ubsan)
+      emscripten_flags="-fsanitize=undefined $emscripten_flags"
       ;;
 
     *)

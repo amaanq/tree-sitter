@@ -31,6 +31,7 @@ pub fn compile_language_to_wasm(
     language_dir: &Path,
     output_dir: &Path,
     force_docker: bool,
+    sanitizers: (bool, bool),
 ) -> Result<()> {
     let grammar_name = get_grammar_name(language_dir)?;
     let output_filename = output_dir.join(format!("tree-sitter-{grammar_name}.wasm"));
@@ -44,6 +45,7 @@ pub fn compile_language_to_wasm(
             .and_then(|p| Some(Path::new(p.file_name()?))),
         &output_filename,
         force_docker,
+        sanitizers,
     )?;
 
     // Exit with an error if the external scanner uses symbols from the
@@ -75,6 +77,8 @@ pub fn compile_language_to_wasm(
                 if !builtin_symbols.contains(&import)
                     && !stdlib_symbols.contains(&import)
                     && !dylink_symbols.contains(&import)
+                    && (!sanitizers.0 || !import.starts_with("__asan_"))
+                    && (!sanitizers.1 || !import.starts_with("__ubsan_"))
                 {
                     missing_symbols.push(import);
                 }
