@@ -456,7 +456,8 @@ impl<'a> HighlightIterLayer<'a> {
                         vec![(None, Vec::new(), false); combined_injections_query.pattern_count()];
                     let matches =
                         cursor.matches(combined_injections_query, tree.root_node(), source);
-                    for mat in matches {
+                    // for mat in matches {
+                    while let Some(mat) = matches.next() {
                         let entry = &mut injections_by_pattern_index[mat.pattern_index];
                         let (language_name, content_node, include_children) = injection_for_match(
                             config,
@@ -1138,7 +1139,7 @@ fn injection_for_match<'a>(
     config: &'a HighlightConfiguration,
     parent_name: Option<&'a str>,
     query: &'a Query,
-    query_match: &QueryMatch<'a, 'a>,
+    query_match: &QueryMatch<'a, 'a, 'a>,
     source: &'a [u8],
 ) -> (Option<&'a str>, Option<Node<'a>>, bool) {
     let content_capture_index = config.injection_content_capture_index;

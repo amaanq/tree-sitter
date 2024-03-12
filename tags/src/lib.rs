@@ -95,7 +95,7 @@ struct LocalScope<'a> {
 
 struct TagsIter<'a, I>
 where
-    I: Iterator<Item = tree_sitter::QueryMatch<'a, 'a>>,
+    I: Iterator<Item = tree_sitter::QueryMatch<'a, 'a, 'a>>,
 {
     matches: I,
     _tree: Tree,
@@ -310,7 +310,7 @@ impl TagsContext {
 
 impl<'a, I> Iterator for TagsIter<'a, I>
 where
-    I: Iterator<Item = tree_sitter::QueryMatch<'a, 'a>>,
+    I: Iterator<Item = tree_sitter::QueryMatch<'a, 'a, 'a>>,
 {
     type Item = Result<Tag, Error>;
 
@@ -554,9 +554,8 @@ where
             // If there are no more matches, then drain the queue.
             else if !self.tag_queue.is_empty() {
                 return Some(Ok(self.tag_queue.remove(0).0));
-            } else {
-                return None;
             }
+            return None;
         }
     }
 }

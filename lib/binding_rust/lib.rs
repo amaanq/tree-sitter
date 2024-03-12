@@ -186,11 +186,12 @@ pub struct QueryPredicate {
 }
 
 /// A match of a [`Query`] to a particular set of [`Node`]s.
-pub struct QueryMatch<'cursor, 'tree> {
+pub struct QueryMatch<'cursor, 'tree, 'a> {
     pub pattern_index: usize,
     pub captures: &'cursor [QueryCapture<'tree>],
     id: u32,
     cursor: *mut ffi::TSQueryCursor,
+    _phantom: PhantomData<&'a ()>,
 }
 
 /// A sequence of [`QueryMatch`]es associated with a given [`QueryCursor`].
@@ -2413,7 +2414,7 @@ impl QueryCursor {
     }
 }
 
-impl<'tree> QueryMatch<'_, 'tree> {
+impl<'tree> QueryMatch<'_, 'tree, '_> {
     #[must_use]
     pub const fn id(&self) -> u32 {
         self.id
@@ -2446,6 +2447,7 @@ impl<'tree> QueryMatch<'_, 'tree> {
                     )
                 })
                 .unwrap_or_default(),
+            _phantom: PhantomData,
         }
     }
 
@@ -2564,12 +2566,35 @@ impl QueryProperty {
     }
 }
 
-impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
-    for QueryMatches<'query, 'tree, T, I>
-{
-    type Item = QueryMatch<'query, 'tree>;
+// impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
+//     for QueryMatches<'query, 'tree, T, I>
+// {
+//     type Item = QueryMatch<'query, 'tree>;
+//
+//     fn next(&mut self) -> Option<Self::Item> {
+//         unsafe {
+//             loop {
+//                 let mut m = MaybeUninit::<ffi::TSQueryMatch>::uninit();
+//                 if ffi::ts_query_cursor_next_match(self.ptr, m.as_mut_ptr()) {
+//                     let result = QueryMatch::new(&m.assume_init(), self.ptr);
+//                     if result.satisfies_text_predicates(
+//                         self.query,
+//                         &mut self.buffer1,
+//                         &mut self.buffer2,
+//                         &mut self.text_provider,
+//                     ) {
+//                         return Some(result);
+//                     }
+//                 } else {
+//                     return None;
+//                 }
+//             }
+//         }
+//     }
+// }
 
-    fn next(&mut self) -> Option<Self::Item> {
+impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> QueryMatches<'query, 'tree, T, I> {
+    pub fn next<'a>(&'a mut self) -> Option<QueryMatch<'query, 'tree, 'a>> {
         unsafe {
             loop {
                 let mut m = MaybeUninit::<ffi::TSQueryMatch>::uninit();
@@ -2591,12 +2616,41 @@ impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
     }
 }
 
-impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
-    for QueryCaptures<'query, 'tree, T, I>
-{
-    type Item = (QueryMatch<'query, 'tree>, usize);
+// impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
+//     for QueryCaptures<'query, 'tree, T, I>
+// {
+//     type Item = (QueryMatch<'query, 'tree, 'a>, usize);
+//
+//     fn next(&mut self) -> Option<Self::Item> {
+//         unsafe {
+//             loop {
+//                 let mut capture_index = 0u32;
+//                 let mut m = MaybeUninit::<ffi::TSQueryMatch>::uninit();
+//                 if ffi::ts_query_cursor_next_capture(
+//                     self.ptr,
+//                     m.as_mut_ptr(),
+//                     std::ptr::addr_of_mut!(capture_index),
+//                 ) {
+//                     let result = QueryMatch::new(&m.assume_init(), self.ptr);
+//                     if result.satisfies_text_predicates(
+//                         self.query,
+//                         &mut self.buffer1,
+//                         &mut self.buffer2,
+//                         &mut self.text_provider,
+//                     ) {
+//                         return Some((result, capture_index as usize));
+//                     }
+//                     result.remove();
+//                 } else {
+//                     return None;
+//                 }
+//             }
+//         }
+//     }
+// }
 
-    fn next(&mut self) -> Option<Self::Item> {
+impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> QueryCaptures<'query, 'tree, T, I> {
+    pub fn next<'a>(&'a mut self) -> Option<(QueryMatch<'query, 'tree, 'a>, usize)> {
         unsafe {
             loop {
                 let mut capture_index = 0u32;
@@ -2656,7 +2710,7 @@ impl<T: TextProvider<I>, I: AsRef<[u8]>> QueryCaptures<'_, '_, T, I> {
     }
 }
 
-impl fmt::Debug for QueryMatch<'_, '_> {
+impl fmt::Debug for QueryMatch<'_, '_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
