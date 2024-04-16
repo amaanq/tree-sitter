@@ -155,7 +155,7 @@ static Length iterator_end_position(Iterator *self) {
 
 static bool iterator_tree_is_visible(const Iterator *self) {
   TreeCursorEntry entry = *array_back(&self->cursor.stack);
-  if (ts_subtree_visible(*entry.subtree)) return true;
+  if (ts_subtree_visible(*entry.subtree)) { return true; }
   if (self->cursor.stack.size > 1) {
     Subtree parent = *self->cursor.stack.contents[self->cursor.stack.size - 2].subtree;
     return ts_language_alias_at(
@@ -208,7 +208,10 @@ static void iterator_ascend(Iterator *self) {
 }
 
 static bool iterator_descend(Iterator *self, uint32_t goal_position) {
-  if (self->in_padding) return false;
+  if (self->in_padding) {
+    // printf("false 1\n");
+    return false;
+  }
 
   bool did_descend = false;
   do {
@@ -221,7 +224,7 @@ static bool iterator_descend(Iterator *self, uint32_t goal_position) {
       Length child_left = length_add(position, ts_subtree_padding(*child));
       Length child_right = length_add(child_left, ts_subtree_size(*child));
 
-      if (child_right.bytes > goal_position) {
+      if (child_right.bytes >= goal_position) {
         array_push(&self->cursor.stack, ((TreeCursorEntry) {
           .subtree = child,
           .position = position,
@@ -231,10 +234,13 @@ static bool iterator_descend(Iterator *self, uint32_t goal_position) {
 
         if (iterator_tree_is_visible(self)) {
           if (child_left.bytes > goal_position) {
+            // printf("child_left: [ %u, %u ]\n", child_left.extent.row + 1, child_left.extent.column);
+            // printf("goal_position: %u\n", goal_position);
             self->in_padding = true;
           } else {
             self->visible_depth++;
           }
+          // printf("true 1\n");
           return true;
         }
 
@@ -247,6 +253,7 @@ static bool iterator_descend(Iterator *self, uint32_t goal_position) {
     }
   } while (did_descend);
 
+  // printf("false 2\n");
   return false;
 }
 
@@ -330,9 +337,9 @@ static IteratorComparison iterator_compare(
         (ts_subtree_parse_state(old_tree) == ERROR_STATE) ==
         (ts_subtree_parse_state(new_tree) == ERROR_STATE)) {
       return IteratorMatches;
-    } else {
-      return IteratorMayDiffer;
     }
+
+    return IteratorMayDiffer;
   }
 
   return IteratorDiffers;
@@ -376,6 +383,7 @@ unsigned ts_subtree_get_changed_ranges(
   } else if (position.bytes > next_position.bytes) {
     ts_range_array_add(&results, next_position, position);
     next_position = position;
+    // printf("[-1]next_position: [%u, %u]\n", next_position.extent.row + 1, next_position.extent.column);
   }
 
   do {
@@ -389,6 +397,7 @@ unsigned ts_subtree_get_changed_ranges(
 
     // Compare the old and new subtrees.
     IteratorComparison comparison = iterator_compare(&old_iter, &new_iter);
+    // printf("comparison: %s\n", comparison == IteratorDiffers ? "IteratorDiffers" : comparison == IteratorMayDiffer ? "IteratorMayDiffer" : "IteratorMatches");
 
     // Even if the two subtrees appear to be identical, they could differ
     // internally if they contain a range of text that was previously
@@ -408,24 +417,61 @@ unsigned ts_subtree_get_changed_ranges(
       // of both subtrees.
       case IteratorMatches:
         next_position = iterator_end_position(&old_iter);
+        // printf("[0]next_position: [%u, %u]\n", next_position.extent.row + 1, next_position.extent.column);
         break;
 
       // If the subtrees might differ internally, descend into both
       // subtrees, finding the first child that spans the current position.
       case IteratorMayDiffer:
-        if (iterator_descend(&old_iter, position.bytes)) {
+        // printf("position: [%u, %u]\n", position.extent.row + 1, position.extent.column);
+        bool old_descended = iterator_descend(&old_iter, position.bytes);
+        // printf("old_descended: %d\n", old_descended);
+        if (old_descended) {
           if (!iterator_descend(&new_iter, position.bytes)) {
             is_changed = true;
             next_position = iterator_end_position(&old_iter);
+            // printf("[1]next_position: [%u, %u]\n", next_position.extent.row + 1, next_position.extent.column);
           }
         } else if (iterator_descend(&new_iter, position.bytes)) {
           is_changed = true;
           next_position = iterator_end_position(&new_iter);
+          // if an error, extend by next node
+          if (
+            new_iter.cursor.stack.size > 0 &&
+            ts_subtree_is_error(*array_back(&new_iter.cursor.stack)->subtree)
+          ) {
+            // printf("ERROR FOUND\n");
+            // Ensure that both iterators are caught up to the current position.
+            while (
+              !iterator_done(&old_iter) &&
+              iterator_end_position(&old_iter).bytes <= next_position.bytes
+            ) iterator_advance(&old_iter);
+            while (
+              !iterator_done(&new_iter) &&
+              iterator_end_position(&new_iter).bytes <= next_position.bytes
+            ) iterator_advance(&new_iter);
+            // Ensure that both iterators are at the same depth in the tree.
+            while (old_iter.visible_depth > new_iter.visible_depth) {
+              iterator_ascend(&old_iter);
+            }
+            while (new_iter.visible_depth > old_iter.visible_depth) {
+              iterator_ascend(&new_iter);
+            }
+            // printf("NEXT SYM: %s\n", ts_language_symbol_name(language, ts_subtree_symbol(*array_back(&new_iter.cursor.stack)->subtree)));
+            // Length start_position = iterator_start_position(&new_iter);
+            // printf("start_position: [%u, %u]\n", start_position.extent.row + 1, start_position.extent.column);
+            if (new_iter.cursor.stack.size > 0) {
+              next_position = iterator_end_position(&new_iter);
+            }
+            // printf("end_position: [%u, %u]\n", next_position.extent.row + 1, next_position.extent.column);
+          }
+          // printf("[2]next_position: [%u, %u]\n", next_position.extent.row + 1, next_position.extent.column);
         } else {
           next_position = length_min(
             iterator_end_position(&old_iter),
             iterator_end_position(&new_iter)
           );
+          // printf("[3]next_position: [%u, %u]\n", next_position.extent.row + 1, next_position.extent.column);
         }
         break;
 
@@ -437,6 +483,7 @@ unsigned ts_subtree_get_changed_ranges(
           iterator_end_position(&old_iter),
           iterator_end_position(&new_iter)
         );
+        // printf("[4]next_position: [%u, %u]\n", next_position.extent.row + 1, next_position.extent.column);
         break;
     }
 
