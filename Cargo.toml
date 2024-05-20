@@ -39,9 +39,9 @@ strip = false
 
 [workspace.dependencies]
 ansi_term = "0.12.1"
-anstyle = "1.0.6"
-anyhow = "1.0.80"
-cc = "1.0.92"
+anstyle = "1.0.7"
+anyhow = "1.0.86"
+cc = "1.0.98"
 clap = { version = "4.5.4", features = [
   "cargo",
   "derive",
@@ -49,12 +49,12 @@ clap = { version = "4.5.4", features = [
   "help",
   "unstable-styles",
 ] }
-ctor = "0.2.7"
+ctor = "0.2.8"
 ctrlc = { version = "3.4.4", features = ["termination"] }
 difference = "2.0.0"
 dirs = "5.0.1"
 filetime = "0.2.23"
-fs4 = "0.8.2"
+fs4 = "0.8.3"
 git2 = "0.18.3"
 glob = "0.3.1"
 heck = "0.5.0"
@@ -71,19 +71,19 @@ rand = "0.8.5"
 regex = "1.10.4"
 regex-syntax = "0.8.3"
 rustc-hash = "1.1.0"
-semver = "1.0.22"
-serde = { version = "1.0.197", features = ["derive"] }
+semver = "1.0.23"
+serde = { version = "1.0.202", features = ["derive"] }
 serde_derive = "1.0.197"
-serde_json = { version = "1.0.115", features = ["preserve_order"] }
+serde_json = { version = "1.0.117", features = ["preserve_order"] }
 smallbitvec = "2.5.3"
 tempfile = "3.10.1"
-thiserror = "1.0.57"
+thiserror = "1.0.61"
 tiny_http = "0.12.0"
-toml = "0.8.12"
+toml = "0.8.13"
 unindent = "0.2.3"
 walkdir = "2.5.0"
 wasmparser = "0.201.0"
-webbrowser = "0.8.14"
+webbrowser = "0.8.15"
 
 tree-sitter = { version = "0.22.2", path = "./lib" }
 tree-sitter-loader = { version = "0.22.2", path = "./cli/loader" }
