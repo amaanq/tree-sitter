@@ -11,9 +11,9 @@
 extern "C" {
 #endif
 
-#include <stdlib.h>
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 /****************************/
 /* Section - ABI Versioning */
@@ -26,7 +26,7 @@ extern "C" {
  * The Tree-sitter library is generally backwards-compatible with languages
  * generated using older CLI versions, but is not forwards-compatible.
  */
-#define TREE_SITTER_LANGUAGE_VERSION 14
+#define TREE_SITTER_LANGUAGE_VERSION 15
 
 /**
  * The earliest ABI version that is supported by the current version of the
@@ -1264,9 +1264,9 @@ TSWasmStore *ts_parser_take_wasm_store(TSParser *);
  */
 void ts_set_allocator(
   void *(*new_malloc)(size_t),
-	void *(*new_calloc)(size_t, size_t),
-	void *(*new_realloc)(void *, size_t),
-	void (*new_free)(void *)
+  void *(*new_calloc)(size_t, size_t),
+  void *(*new_realloc)(void *, size_t),
+  void (*new_free)(void *)
 );
 
 #ifdef __cplusplus

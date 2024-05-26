@@ -42,7 +42,7 @@ typedef struct TSLexer TSLexer;
 struct TSLexer {
   int32_t lookahead;
   TSSymbol result_symbol;
-  void (*advance)(TSLexer *, bool);
+  void (*advance)(TSLexer *);
   void (*mark_end)(TSLexer *);
   uint32_t (*get_column)(TSLexer *);
   bool (*is_at_included_range_start)(const TSLexer *);
