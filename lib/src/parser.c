@@ -1094,6 +1094,8 @@ static bool ts_parser__do_all_potential_reductions(
   StackVersion starting_version,
   TSSymbol lookahead_symbol
 ) {
+  LOG("WTF HAPPENED HERE");
+  LOG_STACK();
   uint32_t initial_version_count = ts_stack_version_count(self->stack);
 
   bool can_shift_lookahead_symbol = false;
@@ -1116,6 +1118,7 @@ static bool ts_parser__do_all_potential_reductions(
     array_clear(&self->reduce_actions);
 
     TSSymbol first_symbol, end_symbol;
+    LOG("lookahead_symbol:%s", SYM_NAME(lookahead_symbol));
     if (lookahead_symbol != 0) {
       first_symbol = lookahead_symbol;
       end_symbol = lookahead_symbol + 1;
@@ -1132,16 +1135,21 @@ static bool ts_parser__do_all_potential_reductions(
         switch (action.type) {
           case TSParseActionTypeShift:
           case TSParseActionTypeRecover:
-            if (!action.shift.extra && !action.shift.repetition) has_shift_action = true;
+            if (!action.shift.extra && !action.shift.repetition) {
+              LOG("shiftable sym:%s", SYM_NAME(symbol));
+              has_shift_action = true;
+            }
             break;
           case TSParseActionTypeReduce:
-            if (action.reduce.child_count > 0)
+            if (action.reduce.child_count > 0) {
+              LOG("reduce sym:%s, child_count:%u", SYM_NAME(symbol), action.reduce.child_count);
               ts_reduce_action_set_add(&self->reduce_actions, (ReduceAction) {
                 .symbol = action.reduce.symbol,
                 .count = action.reduce.child_count,
                 .dynamic_precedence = action.reduce.dynamic_precedence,
                 .production_id = action.reduce.production_id,
               });
+            }
             break;
           default:
             break;
@@ -1176,6 +1184,8 @@ static bool ts_parser__do_all_potential_reductions(
     }
   }
 
+  LOG("AFTER_REDUCTIONS: %s", can_shift_lookahead_symbol ? "true" : "false");
+  LOG_STACK();
   return can_shift_lookahead_symbol;
 }
 
@@ -1185,6 +1195,8 @@ static bool ts_parser__recover_to_state(
   unsigned depth,
   TSStateId goal_state
 ) {
+  LOG("PRE_RECOVER");
+  LOG_STACK();
   StackSliceArray pop = ts_stack_pop_count(self->stack, version, depth);
   StackVersion previous_version = STACK_VERSION_NONE;
 
@@ -1235,6 +1247,8 @@ static bool ts_parser__recover_to_state(
     previous_version = slice.version;
   }
 
+  LOG("POST_RECOVER");
+  LOG_STACK();
   return previous_version != STACK_VERSION_NONE;
 }
 
@@ -1420,6 +1434,8 @@ static void ts_parser__handle_error(
   StackVersion version,
   Subtree lookahead
 ) {
+  LOG("PRE_HANDLE_ERROR");
+  LOG_STACK();
   uint32_t previous_version_count = ts_stack_version_count(self->stack);
 
   // Perform any reductions that can happen in this state, regardless of the lookahead. After
@@ -1471,6 +1487,8 @@ static void ts_parser__handle_error(
             missing_tree, false,
             state_after_missing_symbol
           );
+          LOG("insert_missing symbol:%s, state:%u", SYM_NAME(missing_symbol), state_after_missing_symbol);
+          LOG_STACK();
 
           if (ts_parser__do_all_potential_reductions(
             self, version_with_missing_tree,
@@ -1510,6 +1528,7 @@ static void ts_parser__handle_error(
   }
   ts_parser__recover(self, version, lookahead);
 
+  LOG("POST_HANDLE_ERROR");
   LOG_STACK();
 }
 
@@ -1808,6 +1827,7 @@ static unsigned ts_parser__condense_stack(TSParser *self) {
       if (ts_stack_is_paused(self->stack, i)) {
         if (!has_unpaused_version && self->accept_count < MAX_VERSION_COUNT) {
           LOG("resume version:%u", i);
+          LOG_STACK();
           min_error_cost = ts_stack_error_cost(self->stack, i);
           Subtree lookahead = ts_stack_resume(self->stack, i);
           ts_parser__handle_error(self, i, lookahead);
@@ -1825,6 +1845,9 @@ static unsigned ts_parser__condense_stack(TSParser *self) {
 
   if (made_changes) {
     LOG("condense");
+    LOG_STACK();
+  } else {
+    LOG("no_changes");
     LOG_STACK();
   }
 
