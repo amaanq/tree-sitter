@@ -1,6 +1,7 @@
 #include "tree_sitter/api.h"
 #include "./alloc.h"
 #include "./array.h"
+#include "./clock.h"
 #include "./language.h"
 #include "./point.h"
 #include "./tree_cursor.h"
@@ -305,6 +306,8 @@ struct TSQueryCursor {
   Array(QueryState) states;
   Array(QueryState) finished_states;
   CaptureListPool capture_list_pool;
+  TSDuration timeout_duration;
+  TSClock end_clock;
   uint32_t depth;
   uint32_t max_start_depth;
   uint32_t start_byte;
@@ -2986,6 +2989,8 @@ TSQueryCursor *ts_query_cursor_new(void) {
     .start_point = {0, 0},
     .end_point = POINT_MAX,
     .max_start_depth = UINT32_MAX,
+    .timeout_duration = 0,
+    .end_clock = clock_null(),
   };
   array_reserve(&self->states, 8);
   array_reserve(&self->finished_states, 8);
@@ -2998,6 +3003,14 @@ void ts_query_cursor_delete(TSQueryCursor *self) {
   ts_tree_cursor_delete(&self->cursor);
   capture_list_pool_delete(&self->capture_list_pool);
   ts_free(self);
+}
+
+void ts_query_cursor_set_timeout_micros(TSQueryCursor *self, uint64_t timeout_micros) {
+  self->timeout_duration = duration_from_micros(timeout_micros);
+}
+
+uint64_t ts_query_cursor_timeout_micros(const TSQueryCursor *self) {
+  return duration_to_micros(self->timeout_duration);
 }
 
 bool ts_query_cursor_did_exceed_match_limit(const TSQueryCursor *self) {
@@ -3023,7 +3036,7 @@ void ts_query_cursor_exec(
   const TSQuery *query,
   TSNode node
 ) {
-  if  (query) {
+  if (query) {
     LOG("query steps:\n");
     for (unsigned i = 0; i < query->steps.size; i++) {
       QueryStep *step = &query->steps.contents[i];
@@ -3060,6 +3073,11 @@ void ts_query_cursor_exec(
   self->halted = false;
   self->query = query;
   self->did_exceed_match_limit = false;
+  if (self->timeout_duration) {
+    self->end_clock = clock_after(clock_now(), self->timeout_duration);
+  } else {
+    self->end_clock = clock_null();
+  } 
 }
 
 void ts_query_cursor_set_byte_range(
@@ -3955,7 +3973,10 @@ bool ts_query_cursor_next_match(
   TSQueryMatch *match
 ) {
   if (self->finished_states.size == 0) {
-    if (!ts_query_cursor__advance(self, false)) {
+    if (
+      !ts_query_cursor__advance(self, false) ||
+      (!clock_is_null(self->end_clock) && clock_is_gt(clock_now(), self->end_clock))
+    ) {
       return false;
     }
   }
@@ -4127,9 +4148,14 @@ bool ts_query_cursor_next_capture(
     // If there are no finished matches that are ready to be returned, then
     // continue finding more matches.
     if (
-      !ts_query_cursor__advance(self, true) &&
-      self->finished_states.size == 0
-    ) return false;
+      (
+        !ts_query_cursor__advance(self, true) &&
+        self->finished_states.size == 0
+      ) ||
+      (!clock_is_null(self->end_clock) && clock_is_gt(clock_now(), self->end_clock))
+    ) {
+      return false;
+    }
   }
 }
 

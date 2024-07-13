@@ -2375,6 +2375,27 @@ impl QueryCursor {
         unsafe { ffi::ts_query_cursor_did_exceed_match_limit(self.ptr.as_ptr()) }
     }
 
+    /// Set the maximum duration in microseconds that query execution should be allowed
+    /// to take before halting.
+    ///
+    /// If execution takes longer than this, it will halt early, returning `None`.
+    /// See [`parse`](Parser::parse) for more information.
+    #[doc(alias = "ts_query_cursor_set_timeout_micros")]
+    pub fn set_timeout_micros(&mut self, timeout: u64) {
+        unsafe {
+            ffi::ts_query_cursor_set_timeout_micros(self.ptr.as_ptr(), timeout);
+        }
+    }
+
+    /// Get the duration in microseconds that query execution is allowed to take.
+    ///
+    /// This is set via [`set_timeout_micros`](Parser::set_timeout_micros).
+    #[doc(alias = "ts_query_cursor_timeout_micros")]
+    #[must_use]
+    pub fn timeout_micros(&self) -> u64 {
+        unsafe { ffi::ts_query_cursor_timeout_micros(self.ptr.as_ptr()) }
+    }
+
     /// Iterate over all of the matches in the order that they were found.
     ///
     /// Each match contains the index of the pattern that matched, and a list of

@@ -5194,3 +5194,26 @@ fn test_query_wildcard_with_immediate_first_child() {
         ],
     );
 }
+
+#[test]
+fn test_query_cursor_timeout() {
+    let language = get_language("javascript");
+    let mut parser = Parser::new();
+    parser.set_language(&language).unwrap();
+
+    let source = "function name(one, two, three) { const a = 1; const b = 2; }\n".repeat(1000);
+    let query = Query::new(&language, "(function_declaration name: (identifier) @name)").unwrap();
+    let mut cursor = QueryCursor::new();
+    cursor.set_timeout_micros(1000);
+
+    let tree = parser.parse(&source, None).unwrap();
+
+    let matches = cursor.matches(&query, tree.root_node(), source.as_bytes());
+    // let count = matches.count();
+    let matches = matches.map(|m| m.captures).collect::<Vec<_>>();
+
+    println!("matches: {:?}", matches);
+
+    // println!("count: {}", count);
+    // assert!(count < 1000);
+}

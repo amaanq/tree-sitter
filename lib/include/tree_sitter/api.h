@@ -968,6 +968,20 @@ void ts_query_cursor_delete(TSQueryCursor *self);
 void ts_query_cursor_exec(TSQueryCursor *self, const TSQuery *query, TSNode node);
 
 /**
+ * Set the maximum duration in microseconds that query execution should be allowed
+ * to take before halting.
+ *
+ * If execution takes longer than this, it will halt early, returning NULL.
+ * See [`ts_query_cursor_exec`] for more information.
+ */
+void ts_query_cursor_set_timeout_micros(TSQueryCursor *self, uint64_t timeout_micros);
+
+/**
+ * Get the duration in microseconds that query execution is allowed to take.
+ */
+uint64_t ts_query_cursor_timeout_micros(const TSQueryCursor *self);
+
+/**
  * Manage the maximum number of in-progress matches allowed by this query
  * cursor.
  *
