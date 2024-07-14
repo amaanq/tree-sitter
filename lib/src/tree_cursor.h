@@ -36,6 +36,7 @@ void ts_tree_cursor_current_status(
 
 TreeCursorStep ts_tree_cursor_goto_first_child_internal(TSTreeCursor *);
 TreeCursorStep ts_tree_cursor_goto_next_sibling_internal(TSTreeCursor *);
+TreeCursorStep ts_tree_cursor_goto_previous_sibling_internal(TSTreeCursor *);
 
 static inline Subtree ts_tree_cursor_current_subtree(const TSTreeCursor *_self) {
   const TreeCursor *self = (const TreeCursor *)_self;
