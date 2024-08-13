@@ -155,7 +155,7 @@ static void ts_lexer_goto(Lexer *self, Length position) {
   }
 }
 
-static void ts_lexer__mark_begin(Lexer *self) {
+static void ts_lexer__mark_start(Lexer *self) {
   self->token_start_position = self->current_position;
 }
 
@@ -191,8 +191,6 @@ static void ts_lexer__do_advance(Lexer *self) {
     }
   }
 
-  self->token_start_position = self->current_position;
-
   if (current_range) {
     if (
       self->current_position.bytes < self->chunk_start ||
@@ -216,12 +214,9 @@ static void ts_lexer__advance(TSLexer *_self) {
 
   LOG("consume", self->data.lookahead)
 
-#if TREE_SITTER_LANGUAGE_VERSION <= 14
-  if (!self->called_mark_begin) {
-    ts_lexer__mark_begin(self);
-    self->called_mark_begin = true;
+  if (self->version <= 14) {
+    ts_lexer__mark_start(self);
   }
-#endif
 
   ts_lexer__do_advance(self);
 }
@@ -349,7 +344,10 @@ void ts_lexer_start(Lexer *self) {
     if (
       self->current_position.bytes == 0 &&
       self->data.lookahead == BYTE_ORDER_MARK
-    ) ts_lexer__advance(&self->data);
+    ) {
+      ts_lexer__advance(&self->data, false);
+      ts_lexer__mark_start(self);
+    }
   }
 }
 
@@ -378,16 +376,6 @@ void ts_lexer_finish(Lexer *self, uint32_t *lookahead_end_byte) {
   if (current_lookahead_end_byte > *lookahead_end_byte) {
     *lookahead_end_byte = current_lookahead_end_byte;
   }
-}
-
-void ts_lexer_advance_to_end(Lexer *self) {
-  while (self->chunk) {
-    ts_lexer__advance(&self->data);
-  }
-}
-
-void ts_lexer_mark_begin(Lexer *self) {
-  ts_lexer__mark_begin(self);
 }
 
 void ts_lexer_mark_end(Lexer *self) {

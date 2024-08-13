@@ -1912,6 +1912,7 @@ bool ts_parser_set_language(TSParser *self, const TSLanguage *language) {
         !ts_wasm_store_start(self->wasm_store, &self->lexer.data, language)
       ) return false;
     }
+    self->lexer.version = language->version;
   }
 
   self->language = ts_language_copy(language);

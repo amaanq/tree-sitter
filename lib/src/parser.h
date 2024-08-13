@@ -164,6 +164,7 @@ static inline bool set_contains(TSCharacterRange *ranges, uint32_t len, int32_t 
   UNUSED                        \
   bool eof = false;             \
   int32_t lookahead;            \
+  lexer->mark_begin(lexer);     \
   goto start;                   \
   next_state:                   \
   lexer->advance(lexer, skip);  \
