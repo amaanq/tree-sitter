@@ -35,6 +35,28 @@ pub struct Tables {
     pub large_character_sets: Vec<(Option<Symbol>, CharacterSet)>,
 }
 
+fn remove_unused_lexical_variables(parse_table: &ParseTable, lexical_grammar: &mut LexicalGrammar) {
+    let mut terminal_usages = vec![false; lexical_grammar.variables.len()];
+    for state in &parse_table.states {
+        for symbol in state.terminal_entries.keys() {
+            match symbol.kind {
+                SymbolType::Terminal => terminal_usages[symbol.index] = true,
+                _ => {}
+            }
+        }
+    }
+
+    for (i, value) in terminal_usages.into_iter().enumerate() {
+        if !value {
+            println!(
+                "Unused terminal token: {}",
+                lexical_grammar.variables[i].name
+            );
+            lexical_grammar.variables.remove(i);
+        }
+    }
+}
+
 pub fn build_tables(
     syntax_grammar: &SyntaxGrammar,
     lexical_grammar: &LexicalGrammar,
@@ -43,6 +65,7 @@ pub fn build_tables(
     inlines: &InlinedProductionMap,
     report_symbol_name: Option<&str>,
 ) -> Result<Tables> {
+    remove_unused_lexical_variables(&parse_table, &mut lexical_grammar);
     let (mut parse_table, following_tokens, parse_state_info) =
         build_parse_table(syntax_grammar, lexical_grammar, inlines, variable_info)?;
     let token_conflict_map = TokenConflictMap::new(lexical_grammar, following_tokens);
@@ -62,7 +85,8 @@ pub fn build_tables(
         &token_conflict_map,
         &keywords,
     );
-    populate_used_symbols(&mut parse_table, syntax_grammar, lexical_grammar);
+    let lexical_variables_to_remove =
+        populate_used_symbols(&mut parse_table, syntax_grammar, lexical_grammar);
     minimize_parse_table(
         &mut parse_table,
         syntax_grammar,
@@ -183,10 +207,11 @@ fn populate_used_symbols(
     parse_table: &mut ParseTable,
     syntax_grammar: &SyntaxGrammar,
     lexical_grammar: &LexicalGrammar,
-) {
+) -> Vec<usize> {
     let mut terminal_usages = vec![false; lexical_grammar.variables.len()];
     let mut non_terminal_usages = vec![false; syntax_grammar.variables.len()];
     let mut external_usages = vec![false; syntax_grammar.external_tokens.len()];
+    let mut lexical_variables_to_remove = vec![];
     for state in &parse_table.states {
         for symbol in state.terminal_entries.keys() {
             match symbol.kind {
@@ -208,11 +233,18 @@ fn populate_used_symbols(
             // ensure that a subtree's symbol can be successfully reassigned to the word token
             // without having to move the subtree to the heap.
             // See https://github.com/tree-sitter/tree-sitter/issues/258
+            println!("Used terminal token: {}", lexical_grammar.variables[i].name);
             if syntax_grammar.word_token.map_or(false, |t| t.index == i) {
                 parse_table.symbols.insert(1, Symbol::terminal(i));
             } else {
                 parse_table.symbols.push(Symbol::terminal(i));
             }
+        } else {
+            println!(
+                "Unused terminal token: {}",
+                lexical_grammar.variables[i].name
+            );
+            lexical_variables_to_remove.push(i);
         }
     }
     for (i, value) in external_usages.into_iter().enumerate() {
@@ -225,6 +257,8 @@ fn populate_used_symbols(
             parse_table.symbols.push(Symbol::non_terminal(i));
         }
     }
+
+    return lexical_variables_to_remove;
 }
 
 fn populate_external_lex_states(parse_table: &mut ParseTable, syntax_grammar: &SyntaxGrammar) {

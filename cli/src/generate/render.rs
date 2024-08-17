@@ -152,6 +152,7 @@ impl Generator {
     fn init(&mut self) {
         let mut symbol_identifiers = HashSet::new();
         for i in 0..self.parse_table.symbols.len() {
+            println!("sym_{:?}", &self.parse_table.symbols[i]);
             self.assign_symbol_id(self.parse_table.symbols[i], &mut symbol_identifiers);
         }
         self.symbol_ids.insert(
@@ -256,6 +257,7 @@ impl Generator {
                 .count()
                 + 1;
             let constant_name = if let Some(symbol) = symbol {
+                // check if the symbol is used
                 format!("{}_character_set_{}", self.symbol_ids[symbol], count)
             } else {
                 format!("extras_character_set_{count}")
@@ -1507,6 +1509,7 @@ impl Generator {
         }
 
         used_identifiers.insert(id.clone());
+        println!("Assigning symbol id: {:?} -> {}", symbol, id);
         self.symbol_ids.insert(symbol, id);
     }
 

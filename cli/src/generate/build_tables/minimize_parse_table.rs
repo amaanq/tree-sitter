@@ -32,6 +32,7 @@ pub fn minimize_parse_table(
     minimizer.merge_compatible_states();
     minimizer.remove_unit_reductions();
     minimizer.remove_unused_states();
+    minimizer.remove_unused_variables();
     minimizer.reorder_states_by_descending_size();
 }
 
@@ -455,6 +456,14 @@ impl<'a> Minimizer<'a> {
                 self.parse_table.states.remove(state_id);
             }
             original_state_id += 1;
+        }
+    }
+
+    fn remove_unused_variables(&mut self) {
+        // remove lexical variables in the lexical grammar that are not used
+
+        for variable in &self.lexical_grammar.variables {
+            println!("variable: {:?}", variable);
         }
     }
 

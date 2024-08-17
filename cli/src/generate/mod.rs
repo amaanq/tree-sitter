@@ -138,7 +138,7 @@ fn generate_parser_for_grammar_with_opts(
     abi_version: usize,
     report_symbol_name: Option<&str>,
 ) -> Result<GeneratedParser> {
-    let (syntax_grammar, lexical_grammar, inlines, simple_aliases) =
+    let (syntax_grammar, mut lexical_grammar, inlines, simple_aliases) =
         prepare_grammar(input_grammar)?;
     let variable_info =
         node_types::get_variable_info(&syntax_grammar, &lexical_grammar, &simple_aliases)?;
@@ -150,7 +150,7 @@ fn generate_parser_for_grammar_with_opts(
     );
     let tables = build_tables(
         &syntax_grammar,
-        &lexical_grammar,
+        &mut lexical_grammar,
         &simple_aliases,
         &variable_info,
         &inlines,
