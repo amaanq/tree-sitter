@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     fmt::Write,
     hash::BuildHasherDefault,
 };
@@ -29,10 +29,10 @@ use crate::generate::{
 // sequence of symbols that could lead to that parse state.
 type SymbolSequence = Vec<Symbol>;
 
-type AuxiliarySymbolSequence = Vec<AuxiliarySymbolInfo>;
+type AuxiliarySymbolSequence = BTreeSet<AuxiliarySymbolInfo>;
 pub type ParseStateInfo<'a> = (SymbolSequence, ParseItemSet<'a>);
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct AuxiliarySymbolInfo {
     auxiliary_symbol: Symbol,
     parent_symbols: Vec<Symbol>,
@@ -74,12 +74,12 @@ impl<'a> ParseTableBuilder<'a> {
             .push(ProductionInfo::default());
 
         // Add the error state at index 0.
-        self.add_parse_state(&Vec::new(), &Vec::new(), ParseItemSet::default());
+        self.add_parse_state(&Vec::new(), &BTreeSet::new(), ParseItemSet::default());
 
         // Add the starting state at index 1.
         self.add_parse_state(
             &Vec::new(),
-            &Vec::new(),
+            &BTreeSet::new(),
             ParseItemSet::with(std::iter::once((
                 ParseItem::start(),
                 std::iter::once(&Symbol::end()).copied().collect(),
@@ -117,7 +117,7 @@ impl<'a> ParseTableBuilder<'a> {
         for (terminal, item_set) in non_terminal_extra_item_sets_by_first_terminal {
             self.non_terminal_extra_states
                 .push((terminal, self.parse_table.states.len()));
-            self.add_parse_state(&Vec::new(), &Vec::new(), item_set);
+            self.add_parse_state(&Vec::new(), &BTreeSet::new(), item_set);
         }
 
         while let Some(entry) = self.parse_state_queue.pop_front() {
@@ -193,7 +193,7 @@ impl<'a> ParseTableBuilder<'a> {
     fn add_actions(
         &mut self,
         mut preceding_symbols: SymbolSequence,
-        mut preceding_auxiliary_symbols: Vec<AuxiliarySymbolInfo>,
+        mut preceding_auxiliary_symbols: AuxiliarySymbolSequence,
         state_id: ParseStateId,
         item_set: &ParseItemSet<'a>,
     ) -> Result<()> {
@@ -218,7 +218,7 @@ impl<'a> ParseTableBuilder<'a> {
                     // for conflict resolution.
                     if variable.is_auxiliary() {
                         preceding_auxiliary_symbols
-                            .push(self.get_auxiliary_node_info(item_set, next_symbol));
+                            .insert(self.get_auxiliary_node_info(item_set, next_symbol));
                     }
 
                     // For most parse items, the symbols associated with the preceding children
@@ -444,7 +444,7 @@ impl<'a> ParseTableBuilder<'a> {
         item_set: &ParseItemSet,
         state_id: ParseStateId,
         preceding_symbols: &SymbolSequence,
-        preceding_auxiliary_symbols: &[AuxiliarySymbolInfo],
+        preceding_auxiliary_symbols: &AuxiliarySymbolSequence,
         conflicting_lookahead: Symbol,
         reduction_info: &ReductionInfo,
     ) -> Result<()> {
