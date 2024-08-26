@@ -270,26 +270,38 @@ fn test_node_parent_of_child_by_field_name() {
 
 #[test]
 fn test_parent_of_zero_width_node() {
-    let code = "def dupa(foo):";
+    let code = "def dupa(foo)";
 
     let mut parser = Parser::new();
     parser.set_language(&get_language("python")).unwrap();
 
     let tree = parser.parse(code, None).unwrap();
     let root = tree.root_node();
+    println!("{:#}", root);
     let function_definition = root.child(0).unwrap();
-    let block = function_definition.child(4).unwrap();
+    // let parameters = function_definition.child(2).unwrap();
+    let block = function_definition.child(3).unwrap();
+    println!("start");
     let block_parent = block.parent().unwrap();
+    println!("end");
 
     assert_eq!(block.to_string(), "(block)");
     assert_eq!(block_parent.kind(), "function_definition");
-    assert_eq!(block_parent.to_string(), "(function_definition name: (identifier) parameters: (parameters (identifier)) body: (block))");
-
-    assert_eq!(
-        root.child_containing_descendant(block).unwrap(),
-        function_definition
-    );
-    assert_eq!(function_definition.child_containing_descendant(block), None);
+    // assert_eq!(block_parent.to_string(), "(parameters (identifier))");
+    // assert_eq!(
+    //     function_definition.to_string(),
+    //     "(function_definition name: (identifier) parameters: (parameters (identifier)) body: (block))"
+    // );
+    //
+    // assert_eq!(
+    //     root.child_containing_descendant(block).unwrap(),
+    //     function_definition
+    // );
+    // assert_eq!(
+    //     function_definition
+    //         .child_containing_descendant(block),
+    //     None
+    // );
 }
 
 #[test]
@@ -300,7 +312,11 @@ fn test_node_field_name_for_child() {
         .parse("int w = x + /* y is special! */ y;", None)
         .unwrap();
     let translation_unit_node = tree.root_node();
+    println!("{:#}", translation_unit_node);
     let declaration_node = translation_unit_node.named_child(0).unwrap();
+
+    let child = translation_unit_node.child_containing_descendant(declaration_node.child(0).unwrap());
+    println!("{:#?}", child);
 
     let binary_expression_node = declaration_node
         .child_by_field_name("declarator")

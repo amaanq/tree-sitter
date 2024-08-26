@@ -508,9 +508,12 @@ TSNode ts_node_parent(TSNode self) {
   if (node.id == self.id) return ts_node__null();
 
   while (true) {
-   TSNode next_node = ts_node_child_containing_descendant(node, self);
-   if (ts_node_is_null(next_node)) break;
-   node = next_node;
+    printf("[parent] node.type: %s\n", ts_node_type(node));
+    printf("[parent] self.type: %s\n", ts_node_type(self));
+    TSNode next_node = ts_node_child_containing_descendant(node, self);
+    if (ts_node_is_null(next_node)) { printf("[parent] null\n"); break; }
+    printf("[parent] next_node.type: %s\n\n", ts_node_type(next_node));
+    node = next_node;
   }
 
   return node;
@@ -519,20 +522,52 @@ TSNode ts_node_parent(TSNode self) {
 TSNode ts_node_child_containing_descendant(TSNode self, TSNode subnode) {
   uint32_t start_byte = ts_node_start_byte(subnode);
   uint32_t end_byte = ts_node_end_byte(subnode);
+  TSNode prev_child = ts_node__null();
+  TSNode next_child;
+
+  printf("[child_containing_descendant] start_byte: %d\n", start_byte);
+  printf("[child_containing_descendant] end_byte: %d\n", end_byte);
 
   do {
+    printf("[child_containing_descendant-1] self.type: %s\n", ts_node_type(self));
     NodeChildIterator iter = ts_node_iterate_children(&self);
-    do {
-      if (
-        !ts_node_child_iterator_next(&iter, &self)
-        || ts_node_start_byte(self) > start_byte
-        || self.id == subnode.id
-      ) {
-        return ts_node__null();
+    TSNode matching_child = ts_node__null();
+
+    while (ts_node_child_iterator_next(&iter, &next_child)) {
+      printf("[child_containing_descendant-2] next_child.type: %s\n", ts_node_type(next_child));
+      printf("[child_containing_descendant] iter.position.bytes: %d\n", iter.position.bytes);
+      printf("[child_containing_descendant] ts_node_child_count(next_child): %d\n", ts_node_child_count(next_child));
+
+      if (ts_node_start_byte(next_child) > end_byte) {
+        break;
       }
-    } while (iter.position.bytes < end_byte || ts_node_child_count(self) == 0);
+
+      if (ts_node_start_byte(next_child) <= start_byte && ts_node_end_byte(next_child) >= end_byte) {
+        matching_child = next_child;
+      }
+
+      prev_child = next_child;
+    }
+
+    if (ts_node_is_null(matching_child)) {
+      // If we didn't find a matching child, check if the last child is a zero-width token at the position we're looking for
+      if (!ts_node_is_null(prev_child) && 
+          ts_node_start_byte(prev_child) == start_byte && 
+          ts_node_end_byte(prev_child) == end_byte) {
+        matching_child = prev_child;
+      }
+    }
+
+    if (ts_node_is_null(matching_child)) {
+      printf("[child_containing_descendant] null (no matching child)\n");
+      return ts_node__null();
+    }
+
+    self = matching_child;
+    printf("[child_containing_descendant] ts_node__is_relevant(self, true): %d\n", ts_node__is_relevant(self, true));
   } while (!ts_node__is_relevant(self, true));
 
+  printf("[child_containing_descendant-3] self.type: %s\n", ts_node_type(self));
   return self;
 }
 
