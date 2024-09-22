@@ -199,6 +199,23 @@ fn populate_used_symbols(
             non_terminal_usages[symbol.index] = true;
         }
     }
+    for symbol in &syntax_grammar.extra_symbols {
+        if symbol.kind != SymbolType::NonTerminal {
+            continue;
+        }
+        let variable = &syntax_grammar.variables[symbol.index];
+        for production in &variable.productions {
+            for step in &production.steps {
+                if step.symbol.is_non_terminal() {
+                    non_terminal_usages[step.symbol.index] = true;
+                } else if step.symbol.is_external() {
+                    external_usages[step.symbol.index] = true;
+                } else if step.symbol.is_terminal() {
+                    terminal_usages[step.symbol.index] = true;
+                }
+            }
+        }
+    }
     parse_table.symbols.push(Symbol::end());
     for (i, value) in terminal_usages.into_iter().enumerate() {
         if value {

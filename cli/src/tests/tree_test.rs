@@ -1,6 +1,6 @@
 use std::str;
 
-use tree_sitter::{InputEdit, Parser, Point, Range, Tree};
+use tree_sitter::{InputEdit, Node, Parser, Point, Range, Tree, TreeCursor};
 
 use super::helpers::fixtures::get_language;
 use crate::{fuzz::edits::Edit, parse::perform_edit, tests::invert_edit};
@@ -727,6 +727,33 @@ fn main() {
     assert_eq!(cursor.node().kind(), "type_identifier");
     assert!(cursor.goto_next_sibling());
     assert_eq!(cursor.node().kind(), "block_comment");
+}
+
+#[test]
+fn idk() {
+    fn walk_root_cursor_to_node(cursor: &mut TreeCursor, node: Node) {
+        println!("walk_root_cursor_to_node() target node: {node:#?}");
+        while cursor.node() != node {
+            println!(
+                "walk_root_cursor_to_node() current cursor node: {:#?}",
+                cursor.node()
+            );
+            cursor.goto_first_child_for_byte(node.start_byte()).unwrap();
+            println!("went to first child: {:#?}", cursor.node());
+        }
+    }
+
+    let mut parser = Parser::new();
+    parser.set_language(&get_language("javascript")).unwrap();
+    let source_text = "var a = function() { return 12; }.bind(b)";
+    let tree = parser.parse(source_text, None).unwrap();
+    println!("{:#}", tree.root_node());
+    let target_node = tree.root_node().descendant_for_byte_range(32, 33).unwrap();
+    assert_eq!(target_node.utf8_text(source_text.as_bytes()).unwrap(), "}");
+    let mut root_cursor = tree.walk();
+    println!("start_byte: {:#?}", target_node.start_byte());
+    walk_root_cursor_to_node(&mut root_cursor, target_node);
+    assert_eq!(root_cursor.node(), target_node);
 }
 
 fn index_of(text: &[u8], substring: &str) -> usize {

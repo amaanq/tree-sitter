@@ -7,9 +7,9 @@
 #endif
 #endif
 
-#include <stdlib.h>
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,6 +56,7 @@ typedef enum TSInputEncoding {
 typedef enum TSSymbolType {
   TSSymbolTypeRegular,
   TSSymbolTypeAnonymous,
+  TSSymbolTypeSupertype,
   TSSymbolTypeAuxiliary,
 } TSSymbolType;
 
@@ -520,6 +521,8 @@ bool ts_node_is_missing(TSNode self);
  * which are not required the grammar, but can appear anywhere.
  */
 bool ts_node_is_extra(TSNode self);
+
+bool ts_node_is_supertype(TSNode self);
 
 /**
  * Check if a syntax node has been edited.

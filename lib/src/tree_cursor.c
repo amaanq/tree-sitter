@@ -273,8 +273,9 @@ static inline int64_t ts_tree_cursor_goto_first_child_for_byte_and_point(
     TreeCursorEntry entry;
     CursorChildIterator iterator = ts_tree_cursor_iterate_children(self);
     while (ts_tree_cursor_child_iterator_next(&iterator, &entry, &visible)) {
+      printf("tree:%s\n", ts_language_symbol_name(self->tree->language, ts_subtree_symbol(*entry.subtree)));
       Length entry_end = length_add(entry.position, ts_subtree_size(*entry.subtree));
-      bool at_goal = entry_end.bytes >= goal_byte && point_gte(entry_end.extent, goal_point);
+      bool at_goal = entry_end.bytes > goal_byte && point_gt(entry_end.extent, goal_point);
       uint32_t visible_child_count = ts_subtree_visible_child_count(*entry.subtree);
       if (at_goal) {
         if (visible) {

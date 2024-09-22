@@ -503,6 +503,10 @@ bool ts_node_is_missing(TSNode self) {
   return ts_subtree_missing(ts_node__subtree(self));
 }
 
+bool ts_node_is_supertype(TSNode self) {
+  return ts_language_symbol_metadata(self.tree->language, ts_node_symbol(self)).supertype;
+}
+
 bool ts_node_has_changes(TSNode self) {
   return ts_subtree_has_changes(ts_node__subtree(self));
 }
