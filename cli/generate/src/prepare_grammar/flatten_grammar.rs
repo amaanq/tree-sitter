@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anyhow::{anyhow, Result};
 
 use super::ExtractedSyntaxGrammar;
@@ -173,15 +175,28 @@ fn flatten_variable(variable: Variable) -> SyntaxVariable {
     }
 }
 
-pub fn symbol_is_used(variables: &[SyntaxVariable], symbol: Symbol) -> bool {
-    for variable in variables {
-        for production in &variable.productions {
-            for step in &production.steps {
-                if step.symbol == symbol {
-                    return true;
+pub fn symbol_is_used(variables: &[SyntaxVariable], mut symbol: Symbol) -> bool {
+    let mut set = HashSet::new();
+    if symbol.index == 0 {
+        return false;
+    }
+    loop {
+        for (ix, variable) in variables.iter().enumerate() {
+            for production in &variable.productions {
+                for step in &production.steps {
+                    if step.symbol == symbol {
+                        if symbol.index == ix || set.contains(&ix) {
+                            return true;
+                        } else {
+                            set.insert(symbol.index);
+                            symbol = Symbol::non_terminal(ix);
+                            continue;
+                        }
+                    }
                 }
             }
         }
+        break;
     }
     false
 }
