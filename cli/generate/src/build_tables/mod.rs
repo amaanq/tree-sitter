@@ -62,7 +62,29 @@ pub fn build_tables(
         &token_conflict_map,
         &keywords,
     );
+    for state in parse_table.states.iter().take(2) {
+        for (sym, _) in &state.nonterminal_entries {
+            println!(
+                "Prior PT Symbol: {:?}->{}",
+                sym, syntax_grammar.variables[sym.index].name
+            );
+        }
+    }
     populate_used_symbols(&mut parse_table, syntax_grammar, lexical_grammar);
+    for state in parse_table.states.iter().take(2) {
+        for (sym, _) in &state.terminal_entries {
+            println!(
+                "Prior PT Terminal Symbol 2: {:?}->{}",
+                sym, syntax_grammar.variables[sym.index].name
+            );
+        }
+        // for (sym, _) in &state.nonterminal_entries {
+        //     println!(
+        //         "Prior PT Symbol 2: {:?}->{}",
+        //         sym, syntax_grammar.variables[sym.index].name
+        //     );
+        // }
+    }
     minimize_parse_table(
         &mut parse_table,
         syntax_grammar,
@@ -71,6 +93,14 @@ pub fn build_tables(
         &token_conflict_map,
         &keywords,
     );
+    for state in parse_table.states.iter().take(2) {
+        for (sym, _) in &state.nonterminal_entries {
+            println!(
+                "Prior PT Symbol 3: {:?}->{}",
+                sym, syntax_grammar.variables[sym.index].name
+            );
+        }
+    }
     let lex_tables = build_lex_table(
         &mut parse_table,
         syntax_grammar,
@@ -91,6 +121,22 @@ pub fn build_tables(
             report_symbol_name,
         );
     }
+
+    for state in parse_table.states.iter().take(2) {
+        for (sym, _) in &state.nonterminal_entries {
+            println!(
+                "PT Symbol: {:?}->{}",
+                sym, syntax_grammar.variables[sym.index].name
+            );
+        }
+    }
+
+    // for sym in &parse_table.symbols {
+    //     println!(
+    //         "PT Symbol 2: {:?}->{}",
+    //         sym, syntax_grammar.variables[sym.index].name
+    //     );
+    // }
 
     Ok(Tables {
         parse_table,
@@ -142,6 +188,7 @@ fn populate_error_state(
     // the *conflict-free tokens* identified above.
     for i in 0..n {
         let symbol = Symbol::terminal(i);
+        println!("terminal {}: {}", i, lexical_grammar.variables[i].name);
         if !conflict_free_tokens.contains(&symbol)
             && !keywords.contains(&symbol)
             && syntax_grammar.word_token != Some(symbol)
@@ -188,6 +235,7 @@ fn populate_used_symbols(
     let mut non_terminal_usages = vec![false; syntax_grammar.variables.len()];
     let mut external_usages = vec![false; syntax_grammar.external_tokens.len()];
     for state in &parse_table.states {
+        println!("state: {}", state.id);
         for symbol in state.terminal_entries.keys() {
             match symbol.kind {
                 SymbolType::Terminal => terminal_usages[symbol.index] = true,
@@ -196,6 +244,10 @@ fn populate_used_symbols(
             }
         }
         for symbol in state.nonterminal_entries.keys() {
+            println!(
+                "non_terminal used: {:?}->{}",
+                symbol.index, syntax_grammar.variables[symbol.index].name
+            );
             non_terminal_usages[symbol.index] = true;
         }
     }
@@ -221,6 +273,7 @@ fn populate_used_symbols(
         }
     }
     for (i, value) in non_terminal_usages.into_iter().enumerate() {
+        println!("using sym {}, {}", syntax_grammar.variables[i].name, value);
         if value {
             parse_table.symbols.push(Symbol::non_terminal(i));
         }

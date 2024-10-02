@@ -211,6 +211,10 @@ impl<'a> ParseTableBuilder<'a> {
             if let Some(next_symbol) = item.symbol() {
                 let mut successor = item.successor();
                 if next_symbol.is_non_terminal() {
+                    println!(
+                        "getting entry of: {:?}->{}",
+                        next_symbol, self.syntax_grammar.variables[next_symbol.index].name
+                    );
                     let variable = &self.syntax_grammar.variables[next_symbol.index];
 
                     // Keep track of where auxiliary non-terminals (repeat symbols) are
@@ -241,6 +245,10 @@ impl<'a> ParseTableBuilder<'a> {
                         .or_insert_with(ParseItemSet::default)
                         .insert(successor, lookaheads);
                 } else {
+                    println!(
+                        "getting entry of 2: {:?}->{}",
+                        next_symbol, self.lexical_grammar.variables[next_symbol.index].name
+                    );
                     terminal_successors
                         .entry(next_symbol)
                         .or_insert_with(ParseItemSet::default)
@@ -269,6 +277,10 @@ impl<'a> ParseTableBuilder<'a> {
                         .terminal_entries
                         .entry(lookahead)
                         .or_insert_with(ParseTableEntry::new);
+                    println!(
+                        "getting entry of 3: {:?}->{}",
+                        lookahead, self.lexical_grammar.variables[lookahead.index].name
+                    );
                     let reduction_info = reduction_infos.entry(lookahead).or_default();
 
                     // While inserting Reduce actions, eagerly resolve conflicts related
@@ -328,6 +340,10 @@ impl<'a> ParseTableBuilder<'a> {
             let entry = self.parse_table.states[state_id]
                 .terminal_entries
                 .entry(symbol);
+            println!(
+                "getting entry of 4: {:?}->{}",
+                symbol, self.lexical_grammar.variables[symbol.index].name
+            );
             if let Entry::Occupied(e) = &entry {
                 if !e.get().actions.is_empty() {
                     lookaheads_with_conflicts.insert(symbol);
@@ -354,6 +370,10 @@ impl<'a> ParseTableBuilder<'a> {
             self.parse_table.states[state_id]
                 .nonterminal_entries
                 .insert(symbol, GotoAction::Goto(next_state_id));
+            println!(
+                "getting entry of 5: {:?}->{}",
+                symbol, self.syntax_grammar.variables[symbol.index].name
+            );
         }
 
         // For any symbol with multiple actions, perform conflict resolution.
@@ -405,17 +425,28 @@ impl<'a> ParseTableBuilder<'a> {
         }
         // Add actions for the start tokens of each non-terminal extra rule.
         else {
-            for (terminal, state_id) in &self.non_terminal_extra_states {
-                state
-                    .terminal_entries
-                    .entry(*terminal)
-                    .or_insert(ParseTableEntry {
-                        reusable: true,
-                        actions: vec![ParseAction::Shift {
-                            state: *state_id,
-                            is_repetition: false,
-                        }],
-                    });
+            for (symbol, state_id) in &self.non_terminal_extra_states {
+                if symbol.is_non_terminal() {
+                    state
+                        .nonterminal_entries
+                        .entry(*symbol)
+                        .or_insert(GotoAction::ShiftExtra);
+                } else {
+                    state
+                        .terminal_entries
+                        .entry(*symbol)
+                        .or_insert(ParseTableEntry {
+                            reusable: true,
+                            actions: vec![ParseAction::Shift {
+                                state: *state_id,
+                                is_repetition: false,
+                            }],
+                        });
+                }
+                println!(
+                    "getting entry of 6: {:?}->{}",
+                    symbol, self.syntax_grammar.variables[symbol.index].name
+                );
             }
 
             // Add ShiftExtra actions for the terminal extra tokens. These actions
@@ -426,6 +457,10 @@ impl<'a> ParseTableBuilder<'a> {
                     state
                         .nonterminal_entries
                         .insert(*extra_token, GotoAction::ShiftExtra);
+                    println!(
+                        "getting entry of 7: {:?}->{}",
+                        extra_token, self.syntax_grammar.variables[extra_token.index].name
+                    );
                 } else {
                     state
                         .terminal_entries
@@ -434,6 +469,10 @@ impl<'a> ParseTableBuilder<'a> {
                             reusable: true,
                             actions: vec![ParseAction::ShiftExtra],
                         });
+                    println!(
+                        "getting entry of 8: {:?}->{}",
+                        extra_token, self.syntax_grammar.variables[extra_token.index].name
+                    );
                 }
             }
         }

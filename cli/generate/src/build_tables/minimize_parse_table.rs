@@ -172,6 +172,10 @@ impl<'a> Minimizer<'a> {
         for state_ids in &state_ids_by_group_id {
             // Initialize the new state based on the first old state in the group.
             let mut parse_state = ParseState::default();
+            println!(
+                "swapping {} <->  {}",
+                parse_state.id, self.parse_table.states[state_ids[0]].id
+            );
             mem::swap(&mut parse_state, &mut self.parse_table.states[state_ids[0]]);
 
             // Extend the new state with all of the actions from the other old states
@@ -181,6 +185,10 @@ impl<'a> Minimizer<'a> {
                 mem::swap(
                     &mut other_parse_state,
                     &mut self.parse_table.states[*state_id],
+                );
+                println!(
+                    "swapping {} <-> {}",
+                    other_parse_state.id, self.parse_table.states[*state_id].id
                 );
 
                 parse_state
@@ -484,6 +492,10 @@ impl<'a> Minimizer<'a> {
             .iter()
             .map(|old_id| {
                 let mut state = ParseState::default();
+                println!(
+                    "swapping {} <->  {}",
+                    state.id, self.parse_table.states[*old_id].id
+                );
                 mem::swap(&mut state, &mut self.parse_table.states[*old_id]);
                 state.update_referenced_states(|id, _| new_ids_by_old_id[id]);
                 state

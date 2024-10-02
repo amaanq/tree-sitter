@@ -1129,6 +1129,7 @@ impl Generator {
         {
             add_line!(self, "[{i}] = {{");
             indent!(self);
+            println!("{}", self.large_state_count);
 
             // Ensure the entries are in a deterministic order, since they are
             // internally represented as a hash map.
@@ -1140,6 +1141,10 @@ impl Generator {
             nonterminal_entries.sort_unstable_by_key(|k| k.0);
 
             for (symbol, action) in &nonterminal_entries {
+                println!(
+                    "sym: {:?}={}",
+                    symbol, self.syntax_grammar.variables[symbol.index].name
+                );
                 add_line!(
                     self,
                     "[{}] = STATE({}),",
@@ -1507,6 +1512,7 @@ impl Generator {
         }
 
         used_identifiers.insert(id.clone());
+        println!("insert sym: {:?}={}", symbol, id);
         self.symbol_ids.insert(symbol, id);
     }
 
