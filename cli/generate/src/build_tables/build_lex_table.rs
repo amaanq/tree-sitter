@@ -94,9 +94,12 @@ pub fn build_lex_table(
     let mut large_character_sets = Vec::new();
     for (variable_ix, _variable) in lexical_grammar.variables.iter().enumerate() {
         let symbol = Symbol::terminal(variable_ix);
+        println!("check: {:?} {:?}", _variable, symbol);
         if !symbol_is_used(&syntax_grammar.variables, symbol) {
+            println!("[0] unused: {}", _variable.name);
             continue;
         }
+        println!("[1] used: {}", _variable.name);
         builder.reset();
         builder.add_state_for_tokens(&TokenSet::from_iter([symbol]));
         for state in &builder.table.states {
@@ -106,6 +109,12 @@ pub fn build_lex_table(
                     characters = characters.add(chars);
                     continue;
                 }
+
+                println!(
+                    "range count for {} = {}",
+                    _variable.name,
+                    chars.range_count()
+                );
 
                 if chars.range_count() > LARGE_CHARACTER_RANGE_COUNT
                     && !large_character_sets.iter().any(|(_, set)| set == chars)

@@ -85,7 +85,8 @@ pub fn generate_parser_in_directory(
     }
 
     // Parse and preprocess the grammar.
-    let input_grammar = parse_grammar(&grammar_json)?;
+    let mut input_grammar = parse_grammar(&grammar_json)?;
+    // input_grammar.remove_unused_rules();
 
     // Generate the parser and related files.
     let GeneratedParser {
@@ -105,6 +106,7 @@ pub fn generate_parser_in_directory(
 pub fn generate_parser_for_grammar(grammar_json: &str) -> Result<(String, String)> {
     let grammar_json = JSON_COMMENT_REGEX.replace_all(grammar_json, "\n");
     let input_grammar = parse_grammar(&grammar_json)?;
+    input_grammar.remove_unused_rules();
     let parser =
         generate_parser_for_grammar_with_opts(&input_grammar, tree_sitter::LANGUAGE_VERSION, None)?;
     Ok((input_grammar.name, parser.c_code))

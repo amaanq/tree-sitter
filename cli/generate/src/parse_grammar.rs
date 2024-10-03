@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -97,8 +99,34 @@ pub struct GrammarJSON {
 pub(crate) fn parse_grammar(input: &str) -> Result<InputGrammar> {
     let grammar_json = serde_json::from_str::<GrammarJSON>(input)?;
 
+    let unused = HashSet::new();
+
+    fn variable_is_used(grammar_json: &GrammarJSON, target: &str) -> bool {
+        grammar_json
+            .rules
+            .iter()
+            .filter(|(key, _)| *key != target)
+            .enumerate()
+            .any(|(ix, (name, value))| {
+                let Ok(rule) = serde_json::from_value(value.clone()) else {
+                    return false;
+                };
+                let rule = parse_rule(rule);
+                match rule {
+                    Rule::NamedSymbol(n) => n == target && variable_is_used(grammar_json, name),
+                    Rule::Choice(rules) => rules.iter().any(|r| r == target),
+                    Rule::Metadata { rule, .. } => variable_is_used(grammar_json, rule),
+                    Rule::Repeat(inner) => variable_is_used(grammar_json, inner),
+                }
+            })
+    };
+
     let mut variables = Vec::with_capacity(grammar_json.rules.len());
     for (name, value) in grammar_json.rules {
+        let rule = parse_rule(serde_json::from_value(value)?);
+        if !variable_is_used(&name) {
+            continue;
+        }
         variables.push(Variable {
             name: name.clone(),
             kind: VariableType::Named,

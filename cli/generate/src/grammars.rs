@@ -1,4 +1,7 @@
-use std::{collections::HashMap, fmt};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
 use super::{
     nfa::Nfa,
@@ -39,6 +42,53 @@ pub struct InputGrammar {
     pub variables_to_inline: Vec<String>,
     pub supertype_symbols: Vec<String>,
     pub word_token: Option<String>,
+}
+
+impl InputGrammar {
+    fn rule_is_used(&self, rule: &Rule) -> bool {
+        self.variables.iter().any(|v| match rule {
+            Rule::NamedSymbol(name) => v.name == *name,
+            Rule::Choice(rules) => rules.iter().any(|r| self.rule_is_used(r)),
+            Rule::Metadata { rule, .. } => self.rule_is_used(rule),
+            Rule::Repeat(inner) => self.rule_is_used(inner),
+            Rule::Seq(rules) => rules.iter().any(|r| self.rule_is_used(r)),
+            Rule::Blank | Rule::String(_) | Rule::Pattern(_, _) | Rule::Symbol(_) => false,
+        })
+    }
+
+    pub fn remove_unused_rules(&mut self) {
+        let mut to_remove = HashMap::new();
+
+        for (i, variable) in self.variables.iter().enumerate() {
+            if !self.rule_is_used(&variable.rule) {
+                to_remove.insert(variable.name.clone(), i);
+            }
+        }
+
+        // remove variables
+        self.variables
+            .retain(|v| !to_remove.contains_key(v.name.as_str()));
+
+        // remove extras
+        self.extra_symbols.retain(|r| match r {
+            Rule::NamedSymbol(name) | Rule::String(name) => !to_remove.contains_key(name.as_str()),
+            _ => true,
+        });
+
+        // remove external tokens
+        self.external_tokens.retain(|r| match r {
+            Rule::NamedSymbol(name) | Rule::String(name) => !to_remove.contains_key(name.as_str()),
+            _ => true,
+        });
+
+        // remove variables to inline
+        self.variables_to_inline
+            .retain(|name| !to_remove.contains_key(name.as_str()));
+
+        // remove supertype symbols
+        self.supertype_symbols
+            .retain(|name| !to_remove.contains_key(name.as_str()));
+    }
 }
 
 // Extracted lexical grammar

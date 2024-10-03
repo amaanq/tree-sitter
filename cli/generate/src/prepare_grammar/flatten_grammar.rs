@@ -201,6 +201,30 @@ pub fn symbol_is_used(variables: &[SyntaxVariable], mut symbol: Symbol) -> bool 
     false
 }
 
+pub fn symbol_is_deeply_used(variables: &[SyntaxVariable], symbol: Symbol) -> bool {
+    let is_identifier = symbol.index == 115;
+    println!("is_identifier: {}", is_identifier);
+    for (ix, variable) in variables.iter().enumerate() {
+        for production in &variable.productions {
+            for step in &production.steps {
+                if is_identifier {
+                    println!(
+                        "{} 0: {}, 1: {}, 2: {}",
+                        variables[step.symbol.index].name,
+                        step.symbol.index,
+                        symbol.index == 0,
+                        symbol.index == ix,
+                    );
+                }
+                if step.symbol == symbol {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 pub(super) fn flatten_grammar(grammar: ExtractedSyntaxGrammar) -> Result<SyntaxGrammar> {
     let mut variables = Vec::new();
     for variable in grammar.variables {
@@ -229,6 +253,8 @@ unless they are used only as the grammar's start rule.
                     variable.name,
                 ));
             }
+
+            // if !symbol_is_deeply_used(&variables, symbol) {}
         }
     }
     Ok(SyntaxGrammar {
