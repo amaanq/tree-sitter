@@ -512,6 +512,7 @@ static Subtree ts_parser__lex(
   }
 
   const Length start_position = ts_stack_position(self->stack, version);
+  const ColumnData start_column = ts_stack_column(self->stack, version);
   const Subtree external_token = ts_stack_last_external_token(self->stack, version);
 
   bool found_external_token = false;
@@ -520,15 +521,18 @@ static Subtree ts_parser__lex(
   bool called_get_column = false;
   int32_t first_error_character = 0;
   Length error_start_position = length_zero();
+  ColumnData error_start_column = COLUMN_NONE;
   Length error_end_position = length_zero();
+  ColumnData error_end_column = COLUMN_NONE;
   uint32_t lookahead_end_byte = 0;
   uint32_t external_scanner_state_len = 0;
   bool external_scanner_state_changed = false;
-  ts_lexer_reset(&self->lexer, start_position);
+  ts_lexer_reset(&self->lexer, start_position, start_column);
 
   for (;;) {
     bool found_token = false;
-    Length current_position = self->lexer.current_position;
+    const Length current_position = self->lexer.current_position;
+    const ColumnData current_column = self->lexer.column_data;
 
     if (lex_mode.external_lex_state != 0) {
       LOG(
@@ -581,7 +585,7 @@ static Subtree ts_parser__lex(
         break;
       }
 
-      ts_lexer_reset(&self->lexer, current_position);
+      ts_lexer_reset(&self->lexer, current_position, current_column);
     }
 
     LOG(
@@ -598,7 +602,7 @@ static Subtree ts_parser__lex(
     if (!error_mode) {
       error_mode = true;
       lex_mode = self->language->lex_modes[ERROR_STATE];
-      ts_lexer_reset(&self->lexer, start_position);
+      ts_lexer_reset(&self->lexer, start_position, start_column);
       continue;
     }
 
@@ -606,7 +610,9 @@ static Subtree ts_parser__lex(
       LOG("skip_unrecognized_character");
       skipped_error = true;
       error_start_position = self->lexer.token_start_position;
+      error_start_column = self->lexer.token_start_column;
       error_end_position = self->lexer.token_start_position;
+      error_end_column = self->lexer.token_start_column;
       first_error_character = self->lexer.data.lookahead;
     }
 
@@ -624,13 +630,17 @@ static Subtree ts_parser__lex(
   Subtree result;
   if (skipped_error) {
     Length padding = length_sub(error_start_position, start_position);
+    ColumnData column_padding = column_sub(error_start_column, start_column);
     Length size = length_sub(error_end_position, error_start_position);
+    ColumnData column_size = column_sub(error_end_column, error_start_column);
     uint32_t lookahead_bytes = lookahead_end_byte - error_end_position.bytes;
     result = ts_subtree_new_error(
       &self->tree_pool,
       first_error_character,
       padding,
+      column_padding,
       size,
+      column_size,
       lookahead_bytes,
       parse_state,
       self->language
@@ -639,14 +649,16 @@ static Subtree ts_parser__lex(
     bool is_keyword = false;
     TSSymbol symbol = self->lexer.data.result_symbol;
     Length padding = length_sub(self->lexer.token_start_position, start_position);
+    ColumnData column_padding = column_sub(self->lexer.token_start_column, start_column);
     Length size = length_sub(self->lexer.token_end_position, self->lexer.token_start_position);
+    ColumnData column_size = column_sub(self->lexer.token_end_column, self->lexer.token_start_column);
     uint32_t lookahead_bytes = lookahead_end_byte - self->lexer.token_end_position.bytes;
 
     if (found_external_token) {
       symbol = self->language->external_scanner.symbol_map[symbol];
     } else if (symbol == self->language->keyword_capture_token && symbol != 0) {
       uint32_t end_byte = self->lexer.token_end_position.bytes;
-      ts_lexer_reset(&self->lexer, self->lexer.token_start_position);
+      ts_lexer_reset(&self->lexer, self->lexer.token_start_position, self->lexer.token_start_column);
       ts_lexer_start(&self->lexer);
 
       is_keyword = ts_parser__call_keyword_lex_fn(self);
@@ -664,7 +676,9 @@ static Subtree ts_parser__lex(
       &self->tree_pool,
       symbol,
       padding,
+      column_padding,
       size,
+      column_size,
       lookahead_bytes,
       parse_state,
       found_external_token,
@@ -1425,7 +1439,8 @@ static void ts_parser__handle_error(
   // a reduction to take place.
   ts_parser__do_all_potential_reductions(self, version, 0);
   uint32_t version_count = ts_stack_version_count(self->stack);
-  Length position = ts_stack_position(self->stack, version);
+  const Length position = ts_stack_position(self->stack, version);
+  const ColumnData column = ts_stack_column(self->stack, version);
 
   // Push a discontinuity onto the stack. Merge all of the stack versions that
   // were created in the previous step.
@@ -1453,15 +1468,16 @@ static void ts_parser__handle_error(
           // In case the parser is currently outside of any included range, the lexer will
           // snap to the beginning of the next included range. The missing token's padding
           // must be assigned to position it within the next included range.
-          ts_lexer_reset(&self->lexer, position);
+          ts_lexer_reset(&self->lexer, position, column);
           ts_lexer_mark_end(&self->lexer);
           Length padding = length_sub(self->lexer.token_end_position, position);
+          ColumnData column_padding = column_sub(self->lexer.token_end_column, column);
           uint32_t lookahead_bytes = ts_subtree_total_bytes(lookahead) + ts_subtree_lookahead_bytes(lookahead);
 
           StackVersion version_with_missing_tree = ts_stack_copy_version(self->stack, v);
           Subtree missing_tree = ts_subtree_new_missing_leaf(
             &self->tree_pool, missing_symbol,
-            padding, lookahead_bytes,
+            padding, column_padding, lookahead_bytes,
             self->language
           );
           ts_stack_push(
@@ -1979,7 +1995,7 @@ void ts_parser_reset(TSParser *self) {
   }
 
   reusable_node_clear(&self->reusable_node);
-  ts_lexer_reset(&self->lexer, length_zero());
+  ts_lexer_reset(&self->lexer, length_zero(), COLUMN_NONE);
   ts_stack_clear(self->stack);
   ts_parser__set_cached_token(self, 0, NULL_SUBTREE, NULL_SUBTREE);
   if (self->finished_tree.ptr) {

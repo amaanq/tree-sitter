@@ -251,8 +251,13 @@ static inline TSNode ts_node__next_sibling(TSNode self, bool include_anonymous) 
   uint32_t target_end_byte = ts_node_end_byte(self);
 
   TSNode node = ts_node_parent(self);
+  printf("parent: %s\n", ts_language_symbol_name(self.tree->language, ts_node_symbol(node)));
+  printf("start byte: %d\n", ts_node_start_byte(self));
+  printf("end byte: %d\n", ts_node_end_byte(self));
   TSNode later_node = ts_node__null();
   bool later_node_is_relevant = false;
+  bool is_empty = ts_subtree_total_bytes(ts_node__subtree(self)) == 0;
+  printf("is_empty: %d\n", is_empty);
 
   while (!ts_node_is_null(node)) {
     TSNode later_child = ts_node__null();
@@ -262,7 +267,11 @@ static inline TSNode ts_node__next_sibling(TSNode self, bool include_anonymous) 
     TSNode child;
     NodeChildIterator iterator = ts_node_iterate_children(&node);
     while (ts_node_child_iterator_next(&iterator, &child)) {
-      if (iterator.position.bytes < target_end_byte) continue;
+      printf("child eq %s\n", ts_language_symbol_name(self.tree->language, ts_node_symbol(child)));
+      printf("child start byte: %d\n", ts_node_start_byte(child));
+      printf("child end byte: %d\n", ts_node_end_byte(child));
+      printf("iterator.position.bytes: %d\n", iterator.position.bytes);
+      if (iterator.position.bytes < target_end_byte) { printf("continue\n"); continue; }
       if (ts_node_start_byte(child) <= ts_node_start_byte(self)) {
         if (ts_node__subtree(child).ptr != ts_node__subtree(self).ptr) {
           child_containing_target = child;
@@ -278,6 +287,14 @@ static inline TSNode ts_node__next_sibling(TSNode self, bool include_anonymous) 
       }
     }
 
+    if (!ts_node_is_null(later_child)) {
+      printf("later_child: %s\n", ts_language_symbol_name(self.tree->language, ts_node_symbol(later_child)));
+    }
+
+    if (!ts_node_is_null(child_containing_target)) {
+      printf("child_containing_target: %s\n", ts_language_symbol_name(self.tree->language, ts_node_symbol(child_containing_target)));
+    }
+
     if (!ts_node_is_null(child_containing_target)) {
       if (!ts_node_is_null(later_child)) {
         later_node = later_child;
@@ -285,10 +302,12 @@ static inline TSNode ts_node__next_sibling(TSNode self, bool include_anonymous) 
       }
       node = child_containing_target;
     } else if (later_child_is_relevant) {
+      printf("ret 1: %s\n", ts_language_symbol_name(self.tree->language, ts_node_symbol(later_child)));
       return later_child;
     } else if (!ts_node_is_null(later_child)) {
       node = later_child;
     } else if (later_node_is_relevant) {
+      printf("ret 2: %s\n", ts_language_symbol_name(self.tree->language, ts_node_symbol(later_node)));
       return later_node;
     } else {
       node = later_node;

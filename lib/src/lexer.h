@@ -6,15 +6,39 @@ extern "C" {
 #endif
 
 #include "./length.h"
-#include "./subtree.h"
 #include "tree_sitter/api.h"
 #include "./parser.h"
+
+typedef struct {
+  uint32_t value: 31;
+  bool valid: 1;
+} ColumnData;
+
+static const ColumnData COLUMN_NONE = {0, false};
+
+static inline ColumnData column_add(ColumnData col1, ColumnData col2) {
+  if (col1.valid && col2.valid) {
+    return (ColumnData){.value = col1.value + col2.value, .valid = true};
+  } else {
+    return COLUMN_NONE;
+  }
+}
+
+static inline ColumnData column_sub(ColumnData col1, ColumnData col2) {
+  if (col1.valid && col2.valid) {
+    return (ColumnData){.value = col1.value - col2.value, .valid = true};
+  } else {
+    return COLUMN_NONE;
+  }
+}
 
 typedef struct {
   TSLexer data;
   Length current_position;
   Length token_start_position;
+  ColumnData token_start_column;
   Length token_end_position;
+  ColumnData token_end_column;
 
   TSRange *included_ranges;
   const char *chunk;
@@ -27,6 +51,7 @@ typedef struct {
   uint32_t chunk_size;
   uint32_t lookahead_size;
   bool did_get_column;
+  ColumnData column_data;
 
   char debug_buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE];
 } Lexer;
@@ -34,7 +59,7 @@ typedef struct {
 void ts_lexer_init(Lexer *self);
 void ts_lexer_delete(Lexer *self);
 void ts_lexer_set_input(Lexer *self, TSInput input);
-void ts_lexer_reset(Lexer *self, Length position);
+void ts_lexer_reset(Lexer *self, Length position, ColumnData column);
 void ts_lexer_start(Lexer *self);
 void ts_lexer_finish(Lexer *self, uint32_t *lookahead_end_byte);
 void ts_lexer_advance_to_end(Lexer *self);

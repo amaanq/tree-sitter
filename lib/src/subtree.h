@@ -9,6 +9,7 @@ extern "C" {
 #include <stdbool.h>
 #include <stdio.h>
 #include "./length.h"
+#include "./lexer.h"
 #include "./array.h"
 #include "./error_costs.h"
 #include "./host.h"
@@ -111,7 +112,9 @@ struct SubtreeInlineData {
 typedef struct {
   volatile uint32_t ref_count;
   Length padding;
+  ColumnData column_padding;
   Length size;
+  ColumnData column_size;
   uint32_t lookahead_bytes;
   uint32_t error_cost;
   uint32_t child_count;
@@ -188,13 +191,17 @@ SubtreePool ts_subtree_pool_new(uint32_t capacity);
 void ts_subtree_pool_delete(SubtreePool *self);
 
 Subtree ts_subtree_new_leaf(
-  SubtreePool *pool, TSSymbol symbol, Length padding, Length size,
+  SubtreePool *pool, TSSymbol symbol,
+  Length padding, ColumnData column_padding,
+  Length size, ColumnData column_size,
   uint32_t lookahead_bytes, TSStateId parse_state,
   bool has_external_tokens, bool depends_on_column,
   bool is_keyword, const TSLanguage *language
 );
 Subtree ts_subtree_new_error(
-  SubtreePool *pool, int32_t lookahead_char, Length padding, Length size,
+  SubtreePool *pool, int32_t lookahead_char,
+  Length padding, ColumnData column_padding,
+  Length size, ColumnData column_size, 
   uint32_t bytes_scanned, TSStateId parse_state, const TSLanguage *language
 );
 MutableSubtree ts_subtree_new_node(
@@ -212,6 +219,7 @@ Subtree ts_subtree_new_missing_leaf(
   SubtreePool *pool,
   TSSymbol symbol,
   Length padding,
+  ColumnData column_padding,
   uint32_t lookahead_bytes,
   const TSLanguage *language
 );
@@ -294,6 +302,26 @@ static inline Length ts_subtree_size(Subtree self) {
 
 static inline Length ts_subtree_total_size(Subtree self) {
   return length_add(ts_subtree_padding(self), ts_subtree_size(self));
+}
+
+static inline ColumnData ts_subtree_column_padding(Subtree self) {
+  if (self.data.is_inline) {
+    return COLUMN_NONE;
+  } else {
+    return self.ptr->column_padding;
+  }
+}
+
+static inline ColumnData ts_subtree_column_size(Subtree self) {
+  if (self.data.is_inline) {
+    return COLUMN_NONE;
+  } else {
+    return self.ptr->column_size;
+  }
+}
+
+static inline ColumnData ts_subtree_column(Subtree self) {
+  return column_add(ts_subtree_column_padding(self), ts_subtree_column_size(self));
 }
 
 static inline uint32_t ts_subtree_total_bytes(Subtree self) {

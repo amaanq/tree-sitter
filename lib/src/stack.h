@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include "./array.h"
+#include "./lexer.h"
 #include "./subtree.h"
 #include <stdio.h>
 
@@ -47,7 +48,10 @@ Subtree ts_stack_last_external_token(const Stack *self, StackVersion version);
 void ts_stack_set_last_external_token(Stack *self, StackVersion version, Subtree token);
 
 // Get the position of the given version of the stack within the document.
-Length ts_stack_position(const Stack *, StackVersion);
+Length ts_stack_position(const Stack *self, StackVersion version);
+
+// Get the column of the given version of the stack within the document.
+ColumnData ts_stack_column(const Stack *self, StackVersion version);
 
 // Push a tree and state onto the given version of the stack.
 //

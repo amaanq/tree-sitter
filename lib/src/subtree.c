@@ -11,6 +11,7 @@
 #include "./language.h"
 #include "./error_costs.h"
 #include "./ts_assert.h"
+#include "lexer.h"
 #include <stddef.h>
 
 typedef struct {
@@ -163,7 +164,9 @@ static inline bool ts_subtree_can_inline(Length padding, Length size, uint32_t l
 }
 
 Subtree ts_subtree_new_leaf(
-  SubtreePool *pool, TSSymbol symbol, Length padding, Length size,
+  SubtreePool *pool, TSSymbol symbol,
+  Length padding, ColumnData column_padding,
+  Length size, ColumnData column_size,
   uint32_t lookahead_bytes, TSStateId parse_state,
   bool has_external_tokens, bool depends_on_column,
   bool is_keyword, const TSLanguage *language
@@ -199,7 +202,9 @@ Subtree ts_subtree_new_leaf(
     *data = (SubtreeHeapData) {
       .ref_count = 1,
       .padding = padding,
+      .column_padding = column_padding,
       .size = size,
+      .column_size = column_size,
       .lookahead_bytes = lookahead_bytes,
       .error_cost = 0,
       .child_count = 0,
@@ -241,12 +246,15 @@ void ts_subtree_set_symbol(
 }
 
 Subtree ts_subtree_new_error(
-  SubtreePool *pool, int32_t lookahead_char, Length padding, Length size,
+  SubtreePool *pool, int32_t lookahead_char,
+  Length padding, ColumnData column_padding,
+  Length size, ColumnData column_size,
   uint32_t bytes_scanned, TSStateId parse_state, const TSLanguage *language
 ) {
   Subtree result = ts_subtree_new_leaf(
-    pool, ts_builtin_sym_error, padding, size, bytes_scanned,
-    parse_state, false, false, false, language
+    pool, ts_builtin_sym_error,
+    padding, column_padding, size, column_size,
+    bytes_scanned, parse_state, false, false, false, language
   );
   SubtreeHeapData *data = (SubtreeHeapData *)result.ptr;
   data->fragile_left = true;
@@ -566,11 +574,13 @@ Subtree ts_subtree_new_missing_leaf(
   SubtreePool *pool,
   TSSymbol symbol,
   Length padding,
+  ColumnData column_padding,
   uint32_t lookahead_bytes,
   const TSLanguage *language
 ) {
   Subtree result = ts_subtree_new_leaf(
-    pool, symbol, padding, length_zero(), lookahead_bytes,
+    pool, symbol, padding, column_padding,
+    length_zero(), COLUMN_NONE, lookahead_bytes,
     0, false, false, false, language
   );
   if (result.data.is_inline) {

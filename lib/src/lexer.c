@@ -37,6 +37,33 @@ static const TSRange DEFAULT_RANGE = {
   .end_byte = UINT32_MAX
 };
 
+/**
+ * Sets the column cache to the given value and marks it valid.
+ * @param self The lexer state.
+ * @param val The new value of the column cache.
+ */
+static void ts_lexer__set_column_cache(Lexer *self, uint32_t val) {
+  self->column_data.valid = true;
+  self->column_data.value = val;
+}
+
+/**
+ * Increments the value of the column cache.
+ * @param self The lexer state.
+ */
+static void ts_lexer__increment_column_cache(Lexer *self) {
+  self->column_data.value++;
+}
+
+/**
+ * Marks the column cache as invalid.
+ * @param self The lexer state.
+ */
+static void ts_lexer__invalidate_column_cache(Lexer *self) {
+  self->column_data.valid = false;
+  self->column_data.value = 0;
+}
+
 // Check if the lexer has reached EOF. This state is stored
 // by setting the lexer's `current_included_range_index` such that
 // it has consumed all of its available ranges.
@@ -103,8 +130,9 @@ static void ts_lexer__get_lookahead(Lexer *self) {
   }
 }
 
-static void ts_lexer_goto(Lexer *self, Length position) {
+static void ts_lexer_goto(Lexer *self, Length position, ColumnData column) {
   self->current_position = position;
+  self->column_data = column;
 
   // Move to the first valid position at or after the given position.
   bool found_included_range = false;
@@ -119,6 +147,7 @@ static void ts_lexer_goto(Lexer *self, Length position) {
           .bytes = included_range->start_byte,
           .extent = included_range->start_point,
         };
+        ts_lexer__invalidate_column_cache(self);
       }
 
       self->current_included_range_index = i;
@@ -150,22 +179,31 @@ static void ts_lexer_goto(Lexer *self, Length position) {
       .bytes = last_included_range->end_byte,
       .extent = last_included_range->end_point,
     };
+    ts_lexer__invalidate_column_cache(self);
     ts_lexer__clear_chunk(self);
     self->lookahead_size = 1;
     self->data.lookahead = '\0';
   }
 }
 
-// Intended to be called only from functions that control logging.
+/**
+ * Actually advances the lexer. Does not log anything.
+ * @param self The lexer state.
+ * @param skip Whether to mark the consumed codepoint as whitespace.
+ */
 static void ts_lexer__do_advance(Lexer *self, bool skip) {
   if (self->lookahead_size) {
-    self->current_position.bytes += self->lookahead_size;
     if (self->data.lookahead == '\n') {
       self->current_position.extent.row++;
       self->current_position.extent.column = 0;
+      ts_lexer__set_column_cache(self, 0);
     } else {
+      bool is_bom = self->current_position.bytes == 0 &&
+        self->data.lookahead == BYTE_ORDER_MARK;
+      if (!is_bom) ts_lexer__increment_column_cache(self);
       self->current_position.extent.column += self->lookahead_size;
     }
+    self->current_position.bytes += self->lookahead_size;
   }
 
   const TSRange *current_range = &self->included_ranges[self->current_included_range_index];
@@ -188,7 +226,10 @@ static void ts_lexer__do_advance(Lexer *self, bool skip) {
     }
   }
 
-  if (skip) self->token_start_position = self->current_position;
+  if (skip) {
+    self->token_start_position = self->current_position;
+    self->token_start_column = self->column_data;
+  }
 
   if (current_range) {
     if (
@@ -240,36 +281,42 @@ static void ts_lexer__mark_end(TSLexer *_self) {
         previous_included_range->end_byte,
         previous_included_range->end_point,
       };
+      self->token_end_column = COLUMN_NONE;
       return;
     }
   }
   self->token_end_position = self->current_position;
+  self->token_end_column = self->column_data;
 }
 
 static uint32_t ts_lexer__get_column(TSLexer *_self) {
   Lexer *self = (Lexer *)_self;
 
-  uint32_t goal_byte = self->current_position.bytes;
-
   self->did_get_column = true;
-  Length start_of_col = {
-    self->current_position.bytes - self->current_position.extent.column,
-    {self->current_position.extent.row, 0},
-  };
-  ts_lexer_goto(self, start_of_col);
-  ts_lexer__get_chunk(self);
 
-  uint32_t result = 0;
-  if (!ts_lexer__eof(_self)) {
-    ts_lexer__get_lookahead(self);
-    while (self->current_position.bytes < goal_byte && self->chunk) {
-      result++;
-      ts_lexer__do_advance(self, false);
-      if (ts_lexer__eof(_self)) break;
+  if (!self->column_data.valid) {
+    // Record current position
+    uint32_t goal_byte = self->current_position.bytes;
+
+    // Back up to the beginning of the line
+    Length start_of_col = {
+      self->current_position.bytes - self->current_position.extent.column,
+      {self->current_position.extent.row, 0},
+    };
+    ts_lexer_goto(self, start_of_col, COLUMN_NONE);
+    ts_lexer__get_chunk(self);
+
+    if (!ts_lexer__eof(_self)) {
+      ts_lexer__get_lookahead(self);
+
+      // Advance to the recorded position
+      while (self->current_position.bytes < goal_byte && !ts_lexer__eof(_self) && self->chunk) {
+        ts_lexer__do_advance(self, false);
+      }
     }
   }
 
-  return result;
+  return self->column_data.value;
 }
 
 // Is the lexer at a boundary between two disjoint included ranges of
@@ -322,6 +369,11 @@ void ts_lexer_init(Lexer *self) {
     .included_ranges = NULL,
     .included_range_count = 0,
     .current_included_range_index = 0,
+    .did_get_column = false,
+    .column_data = {
+      .valid = false,
+      .value = 0
+    }
   };
   ts_lexer_set_included_ranges(self, NULL, 0);
 }
@@ -333,29 +385,33 @@ void ts_lexer_delete(Lexer *self) {
 void ts_lexer_set_input(Lexer *self, TSInput input) {
   self->input = input;
   ts_lexer__clear_chunk(self);
-  ts_lexer_goto(self, self->current_position);
+  ts_lexer_goto(self, self->current_position, self->column_data);
 }
 
 // Move the lexer to the given position. This doesn't do any work
 // if the parser is already at the given position.
-void ts_lexer_reset(Lexer *self, Length position) {
+void ts_lexer_reset(Lexer *self, Length position, ColumnData column) {
   if (position.bytes != self->current_position.bytes) {
-    ts_lexer_goto(self, position);
+    ts_lexer_goto(self, position, column);
   }
 }
 
 void ts_lexer_start(Lexer *self) {
   self->token_start_position = self->current_position;
+  self->token_start_column = self->column_data;
   self->token_end_position = LENGTH_UNDEFINED;
+  self->token_end_column = COLUMN_NONE;
   self->data.result_symbol = 0;
   self->did_get_column = false;
   if (!ts_lexer__eof(&self->data)) {
     if (!self->chunk_size) ts_lexer__get_chunk(self);
     if (!self->lookahead_size) ts_lexer__get_lookahead(self);
-    if (
-      self->current_position.bytes == 0 &&
-      self->data.lookahead == BYTE_ORDER_MARK
-    ) ts_lexer__advance(&self->data, true);
+    if (self->current_position.bytes == 0) {
+      if (self->data.lookahead == BYTE_ORDER_MARK) {
+        ts_lexer__advance(&self->data, true);
+      }
+      ts_lexer__set_column_cache(self, 0);
+    }
   }
 }
 
@@ -372,6 +428,7 @@ void ts_lexer_finish(Lexer *self, uint32_t *lookahead_end_byte) {
     point_lt(self->token_end_position.extent, self->token_start_position.extent)
   ) {
     self->token_start_position = self->token_end_position;
+    self->token_start_column = self->token_end_column;
   }
 
   uint32_t current_lookahead_end_byte = self->current_position.bytes + 1;
@@ -423,7 +480,7 @@ bool ts_lexer_set_included_ranges(
   self->included_ranges = ts_realloc(self->included_ranges, size);
   memcpy(self->included_ranges, ranges, size);
   self->included_range_count = count;
-  ts_lexer_goto(self, self->current_position);
+  ts_lexer_goto(self, self->current_position, self->column_data);
   return true;
 }
 

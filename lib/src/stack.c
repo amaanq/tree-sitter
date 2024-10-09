@@ -2,8 +2,9 @@
 #include "./language.h"
 #include "./subtree.h"
 #include "./array.h"
-#include "./stack.h"
 #include "./length.h"
+#include "./lexer.h"
+#include "./stack.h"
 #include <assert.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -29,6 +30,7 @@ typedef struct {
 struct StackNode {
   TSStateId state;
   Length position;
+  ColumnData column;
   StackLink links[MAX_LINK_COUNT];
   short unsigned int link_count;
   uint32_t ref_count;
@@ -160,6 +162,7 @@ static StackNode *stack_node_new(
     };
 
     node->position = previous_node->position;
+    node->column = previous_node->column;
     node->error_cost = previous_node->error_cost;
     node->dynamic_precedence = previous_node->dynamic_precedence;
     node->node_count = previous_node->node_count;
@@ -167,11 +170,13 @@ static StackNode *stack_node_new(
     if (subtree.ptr) {
       node->error_cost += ts_subtree_error_cost(subtree);
       node->position = length_add(node->position, ts_subtree_total_size(subtree));
+      node->column = column_add(node->column, ts_subtree_column(subtree));
       node->node_count += stack__subtree_node_count(subtree);
       node->dynamic_precedence += ts_subtree_dynamic_precedence(subtree);
     }
   } else {
     node->position = length_zero();
+    node->column = COLUMN_NONE;
     node->error_cost = 0;
   }
 
@@ -466,6 +471,10 @@ TSStateId ts_stack_state(const Stack *self, StackVersion version) {
 
 Length ts_stack_position(const Stack *self, StackVersion version) {
   return array_get(&self->heads, version)->node->position;
+}
+
+ColumnData ts_stack_column(const Stack *self, StackVersion version) {
+  return array_get(&self->heads, version)->node->column;
 }
 
 Subtree ts_stack_last_external_token(const Stack *self, StackVersion version) {
