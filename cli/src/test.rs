@@ -17,7 +17,6 @@ use regex::{
 };
 use similar::{ChangeTag, TextDiff};
 use tree_sitter::{format_sexp, Language, LogType, Parser, Query};
-use walkdir::WalkDir;
 
 use super::util;
 
@@ -261,23 +260,18 @@ pub fn get_tmp_test_file(target_test: u32, color: bool) -> Result<(PathBuf, Vec<
     Ok((test_path, languages))
 }
 
-pub fn check_queries_at_path(language: &Language, path: &Path) -> Result<()> {
-    if path.exists() {
-        for entry in WalkDir::new(path)
-            .into_iter()
-            .filter_map(std::result::Result::ok)
-            .filter(|e| {
-                e.file_type().is_file()
-                    && e.path().extension().and_then(OsStr::to_str) == Some("scm")
-                    && !e.path().starts_with(".")
-            })
-        {
-            let filepath = entry.file_name().to_str().unwrap_or("");
-            let content = fs::read_to_string(entry.path())
-                .with_context(|| format!("Error reading query file {filepath:?}"))?;
-            Query::new(language, &content)
-                .with_context(|| format!("Error in query file {filepath:?}"))?;
-        }
+pub fn check_queries_at_path(
+    language: &Language,
+    paths: impl Iterator<Item = PathBuf>,
+) -> Result<()> {
+    for path in paths.into_iter().filter(|e| {
+        e.is_file() && e.extension().and_then(OsStr::to_str) == Some("scm") && !e.starts_with(".")
+    }) {
+        let filepath = path.file_name().unwrap().to_str().unwrap();
+        let content = fs::read_to_string(filepath)
+            .with_context(|| format!("Error reading query file {filepath:?}"))?;
+        Query::new(language, &content)
+            .with_context(|| format!("Error in query file {filepath:?}"))?;
     }
     Ok(())
 }

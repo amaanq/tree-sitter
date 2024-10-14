@@ -967,8 +967,23 @@ impl Test {
             test::run_tests_at_path(&mut parser, &mut opts)?;
         }
 
-        // Check that all of the queries are valid.
-        test::check_queries_at_path(language, &current_dir.join("queries"))?;
+        let grammar_config = serde_json::from_str::<TreeSitterJSON>(&fs::read_to_string(
+            current_dir.join("tree-sitter.json"),
+        )?)
+        .with_context(|| "Failed to parse tree-sitter.json")?;
+
+        for grammar in grammar_config.grammars {
+            let Some((language, _)) = languages.iter().find(|(_, n)| n == &grammar.name) else {
+                continue;
+            };
+
+            let query_files = grammar.query_files();
+
+            parser.set_language(language)?;
+
+            // Check that all of the queries are valid.
+            test::check_queries_at_path(language, query_files.iter().map(|q| current_dir.join(q)))?;
+        }
 
         // Run the syntax highlighting tests.
         let test_highlight_dir = test_dir.join("highlight");

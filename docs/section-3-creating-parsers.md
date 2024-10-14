@@ -128,15 +128,19 @@ These keys help to decide whether the language applies to a given file:
 
 * `injection-regex` - A regex pattern that will be tested against a *language name* in order to determine whether this language should be used for a potential *language injection* site. Language injection is described in more detail in [a later section](#language-injection).
 
-###### Query Paths
+###### The `queries` field
 
-These keys specify relative paths from the directory containing `tree-sitter.json` to the files that control syntax highlighting:
+The `queries` object is used for specifying query files for various commands, such as `test` and `highlight`.
+
+In this object, you can add any key name and map it to a query file, or files. These keys specify relative paths from the directory containing `tree-sitter.json` to query files, and the following four keys have special meaning:
 
 * `highlights` - Path to a *highlight query*. Default: `queries/highlights.scm`
 * `locals` - Path to a *local variable query*. Default: `queries/locals.scm`.
 * `injections` - Path to an *injection query*. Default: `queries/injections.scm`.
+* `tags` - Path to a *symbol tagging query*. Default: `queries/tags.scm`.
 
-The behaviors of these three files are described in the next section.
+Beyond this, you can specify other keys that are used in the `tree-sitter test` command, e.g. a `context` field pointing to `queries/context.scm`.
+This would only be used in `tree-sitter test` to ensure that the query is valid.
 
 ##### The `metadata` field
 

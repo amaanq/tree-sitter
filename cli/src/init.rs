@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     str::{self, FromStr},
@@ -13,7 +14,7 @@ use serde_json::{Map, Value};
 use tree_sitter_generate::write_file;
 use tree_sitter_loader::{
     Author, Bindings, Grammar, Links, Metadata, PackageJSON, PackageJSONAuthor,
-    PackageJSONRepository, PathsJSON, TreeSitterJSON,
+    PackageJSONRepository, PathsJSON, Queries, TreeSitterJSON,
 };
 use url::Url;
 
@@ -147,6 +148,7 @@ impl JsonConfigOpts {
                 injection_regex: Some(format!("^{}$", self.name)),
                 first_line_regex: None,
                 content_regex: None,
+                queries: None,
             }],
             metadata: Metadata {
                 version: self.version,
@@ -236,13 +238,20 @@ pub fn migrate_package_json(repo_path: &Path) -> Result<bool> {
                 path: l.path,
                 external_files: l.external_files,
                 file_types: l.file_types,
-                highlights: l.highlights,
-                injections: l.injections,
-                locals: l.locals,
-                tags: l.tags,
+                highlights: PathsJSON::Empty,
+                injections: PathsJSON::Empty,
+                locals: PathsJSON::Empty,
+                tags: PathsJSON::Empty,
                 injection_regex: l.injection_regex,
                 first_line_regex: l.first_line_regex,
                 content_regex: l.content_regex,
+                queries: Some(Queries {
+                    highlights: l.highlights,
+                    injections: l.injections,
+                    locals: l.locals,
+                    tags: l.tags,
+                    queries: HashMap::new(),
+                }),
             })
             .collect(),
         metadata: Metadata {

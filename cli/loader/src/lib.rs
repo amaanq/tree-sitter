@@ -73,6 +73,20 @@ impl PathsJSON {
         }
     }
 
+    fn add(self, other: Self) -> Option<Vec<String>> {
+        if self.is_empty() && other.is_empty() {
+            return None;
+        }
+
+        let mut vec = self.into_vec().unwrap_or_default();
+        vec.extend(other.into_vec().unwrap_or_default());
+        Some(vec)
+    }
+
+    fn take(&mut self) -> Self {
+        mem::replace(self, Self::Empty)
+    }
+
     const fn is_empty(&self) -> bool {
         matches!(self, Self::Empty)
     }
@@ -182,6 +196,82 @@ pub struct Grammar {
     pub first_line_regex: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_regex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queries: Option<Queries>,
+}
+
+impl Grammar {
+    #[must_use]
+    pub fn query_files(mut self) -> Vec<String> {
+        let highlights = self
+            .highlights
+            .add(
+                self.queries
+                    .as_mut()
+                    .map(|q| q.highlights.take())
+                    .unwrap_or_default(),
+            )
+            .unwrap_or_default();
+        let injections = self
+            .injections
+            .add(
+                self.queries
+                    .as_mut()
+                    .map(|q| q.injections.take())
+                    .unwrap_or_default(),
+            )
+            .unwrap_or_default();
+        let locals = self
+            .locals
+            .add(
+                self.queries
+                    .as_mut()
+                    .map(|q| q.locals.take())
+                    .unwrap_or_default(),
+            )
+            .unwrap_or_default();
+        let tags = self
+            .tags
+            .add(
+                self.queries
+                    .as_mut()
+                    .map(|q| q.tags.take())
+                    .unwrap_or_default(),
+            )
+            .unwrap_or_default();
+        let rest = self
+            .queries
+            .map(|mut q| {
+                q.queries.values_mut().fold(Vec::new(), |mut acc, v| {
+                    acc.extend(v.take().into_vec().unwrap_or_default());
+                    acc
+                })
+            })
+            .unwrap_or_default();
+
+        let mut result = Vec::new();
+        result.extend(highlights);
+        result.extend(injections);
+        result.extend(locals);
+        result.extend(tags);
+        result.extend(rest);
+        result
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Queries {
+    #[serde(default, skip_serializing_if = "PathsJSON::is_empty")]
+    pub highlights: PathsJSON,
+    #[serde(default, skip_serializing_if = "PathsJSON::is_empty")]
+    pub injections: PathsJSON,
+    #[serde(default, skip_serializing_if = "PathsJSON::is_empty")]
+    pub locals: PathsJSON,
+    #[serde(default, skip_serializing_if = "PathsJSON::is_empty")]
+    pub tags: PathsJSON,
+    #[serde(flatten)]
+    pub queries: HashMap<String, PathsJSON>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1110,7 +1200,7 @@ impl Loader {
 
         if let Some(config) = TreeSitterJSON::from_file(parser_path) {
             let language_count = self.languages_by_id.len();
-            for grammar in config.grammars {
+            for mut grammar in config.grammars {
                 // Determine the path to the parser directory. This can be specified in
                 // the tree-sitter.json, but defaults to the directory containing the
                 // tree-sitter.json.
@@ -1151,6 +1241,39 @@ impl Loader {
                     self.languages_by_id.len() - 1
                 };
 
+                // TODO: remove deprecated fields in 0.26
+                let injections_filenames = grammar.injections.add(
+                    grammar
+                        .queries
+                        .as_mut()
+                        .map(|q| q.injections.take())
+                        .unwrap_or_default(),
+                );
+
+                let locals_filenames = grammar.locals.add(
+                    grammar
+                        .queries
+                        .as_mut()
+                        .map(|q| q.locals.take())
+                        .unwrap_or_default(),
+                );
+
+                let tags_filenames = grammar.tags.add(
+                    grammar
+                        .queries
+                        .as_mut()
+                        .map(|q| q.tags.take())
+                        .unwrap_or_default(),
+                );
+
+                let highlights_filenames = grammar.highlights.add(
+                    grammar
+                        .queries
+                        .as_mut()
+                        .map(|q| q.highlights.take())
+                        .unwrap_or_default(),
+                );
+
                 let configuration = LanguageConfiguration {
                     root_path: parser_path.to_path_buf(),
                     language_name: grammar.name,
@@ -1160,10 +1283,10 @@ impl Loader {
                     content_regex: Self::regex(grammar.content_regex.as_deref()),
                     first_line_regex: Self::regex(grammar.first_line_regex.as_deref()),
                     injection_regex: Self::regex(grammar.injection_regex.as_deref()),
-                    injections_filenames: grammar.injections.into_vec(),
-                    locals_filenames: grammar.locals.into_vec(),
-                    tags_filenames: grammar.tags.into_vec(),
-                    highlights_filenames: grammar.highlights.into_vec(),
+                    injections_filenames,
+                    locals_filenames,
+                    tags_filenames,
+                    highlights_filenames,
                     #[cfg(feature = "tree-sitter-highlight")]
                     highlight_config: OnceCell::new(),
                     #[cfg(feature = "tree-sitter-tags")]
