@@ -145,6 +145,8 @@ impl<'a> ParseTableBuilder<'a> {
             }
         }
 
+        println!("ret pt: {:#?}", self.parse_table);
+
         Ok((self.parse_table, self.parse_state_info_by_id))
     }
 
@@ -195,6 +197,7 @@ impl<'a> ParseTableBuilder<'a> {
         state_id: ParseStateId,
         item_set: &ParseItemSet<'a>,
     ) -> Result<()> {
+        println!("call {:#?}", item_set.entries);
         let mut terminal_successors = BTreeMap::new();
         let mut non_terminal_successors = BTreeMap::new();
         let mut lookaheads_with_conflicts = TokenSet::new();
@@ -248,6 +251,7 @@ impl<'a> ParseTableBuilder<'a> {
             // If the item is finished, then add a Reduce action to this state based
             // on this item.
             else {
+                println!("finished");
                 let symbol = Symbol::non_terminal(item.variable_index as usize);
                 let action = if item.is_augmented() {
                     ParseAction::Accept
@@ -332,14 +336,26 @@ impl<'a> ParseTableBuilder<'a> {
                 }
             }
 
-            entry
-                .or_insert_with(ParseTableEntry::new)
-                .actions
-                .push(ParseAction::Shift {
-                    state: next_state_id,
-                    is_repetition: false,
-                });
+            println!("next_state_id: {}", next_state_id);
+            if symbol.is_eof() {
+                entry
+                    .or_insert_with(ParseTableEntry::new)
+                    .actions
+                    .push(ParseAction::Accept);
+            } else {
+                entry
+                    .or_insert_with(ParseTableEntry::new)
+                    .actions
+                    .push(ParseAction::Shift {
+                        state: next_state_id,
+                        is_repetition: false,
+                    });
+            }
         }
+        println!(
+            "term: {:#?}",
+            self.parse_table.states[state_id].terminal_entries
+        );
 
         for (symbol, next_item_set) in non_terminal_successors {
             preceding_symbols.push(symbol);
@@ -914,7 +930,9 @@ impl<'a> ParseTableBuilder<'a> {
 
     fn symbol_name(&self, symbol: &Symbol) -> String {
         match symbol.kind {
-            SymbolType::End | SymbolType::EndOfNonTerminalExtra => "EOF".to_string(),
+            SymbolType::End | SymbolType::EndOfNonTerminalExtra | SymbolType::EOF => {
+                "EOF".to_string()
+            }
             SymbolType::External => self.syntax_grammar.external_tokens[symbol.index]
                 .name
                 .clone(),
@@ -948,6 +966,14 @@ fn populate_following_tokens(
     for production in productions {
         for i in 1..production.steps.len() {
             let left_tokens = builder.last_set(&production.steps[i - 1].symbol);
+            println!(
+                "sym-1: {}",
+                grammar.variables[production.steps[i - 1].symbol.index].name
+            );
+            println!(
+                "sym: {}",
+                grammar.variables[production.steps[i].symbol.index].name
+            );
             let right_tokens = builder.first_set(&production.steps[i].symbol);
             for left_token in left_tokens.iter() {
                 if left_token.is_terminal() {
@@ -1002,6 +1028,8 @@ pub fn build_parse_table<'a>(
         },
     }
     .build()?;
+
+    println!("Table: {table:#?}");
 
     Ok((table, following_tokens, item_sets))
 }

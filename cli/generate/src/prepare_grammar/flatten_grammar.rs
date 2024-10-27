@@ -117,6 +117,16 @@ impl RuleFlattener {
                 });
                 true
             }
+            Rule::EOF => {
+                self.production.steps.push(ProductionStep {
+                    symbol: Symbol::eof(),
+                    precedence: Precedence::None,
+                    associativity: None,
+                    alias: None,
+                    field_name: None,
+                });
+                true
+            }
             _ => false,
         }
     }

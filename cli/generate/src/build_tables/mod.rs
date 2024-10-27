@@ -45,6 +45,7 @@ pub fn build_tables(
 ) -> Result<Tables> {
     let (mut parse_table, following_tokens, parse_state_info) =
         build_parse_table(syntax_grammar, lexical_grammar, inlines, variable_info)?;
+    println!("ptable: {:#?}", parse_table);
     let token_conflict_map = TokenConflictMap::new(lexical_grammar, following_tokens);
     let coincident_token_index = CoincidentTokenIndex::new(&parse_table, lexical_grammar);
     let keywords = identify_keywords(
@@ -91,6 +92,8 @@ pub fn build_tables(
             report_symbol_name,
         );
     }
+
+    println!("Table 2: {parse_table:#?}");
 
     Ok(Tables {
         parse_table,
@@ -187,11 +190,13 @@ fn populate_used_symbols(
     let mut terminal_usages = vec![false; lexical_grammar.variables.len()];
     let mut non_terminal_usages = vec![false; syntax_grammar.variables.len()];
     let mut external_usages = vec![false; syntax_grammar.external_tokens.len()];
+    let mut has_eof = false;
     for state in &parse_table.states {
         for symbol in state.terminal_entries.keys() {
             match symbol.kind {
                 SymbolType::Terminal => terminal_usages[symbol.index] = true,
                 SymbolType::External => external_usages[symbol.index] = true,
+                SymbolType::EOF => has_eof = true,
                 _ => {}
             }
         }
@@ -200,6 +205,9 @@ fn populate_used_symbols(
         }
     }
     parse_table.symbols.push(Symbol::end());
+    if has_eof {
+        parse_table.symbols.push(Symbol::eof());
+    }
     for (i, value) in terminal_usages.into_iter().enumerate() {
         if value {
             // Assign the grammar's word token a low numerical index. This ensures that

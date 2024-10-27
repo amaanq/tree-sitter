@@ -11,6 +11,7 @@ pub enum SymbolType {
     EndOfNonTerminalExtra,
     Terminal,
     NonTerminal,
+    EOF,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -68,6 +69,7 @@ pub enum Rule {
     },
     Repeat(Box<Rule>),
     Seq(Vec<Rule>),
+    EOF,
 }
 
 // Because tokens are represented as small (~400 max) unsigned integers,
@@ -78,6 +80,7 @@ pub enum Rule {
 pub struct TokenSet {
     terminal_bits: SmallBitVec,
     external_bits: SmallBitVec,
+    end: bool,
     eof: bool,
     end_of_nonterminal_extra: bool,
 }
@@ -219,8 +222,13 @@ impl Symbol {
     }
 
     #[must_use]
-    pub fn is_eof(&self) -> bool {
+    pub fn is_end(&self) -> bool {
         self.kind == SymbolType::End
+    }
+
+    #[must_use]
+    pub fn is_eof(&self) -> bool {
+        self.kind == SymbolType::EOF
     }
 
     #[must_use]
@@ -262,6 +270,13 @@ impl Symbol {
             index: 0,
         }
     }
+
+    pub const fn eof() -> Self {
+        Self {
+            kind: SymbolType::EOF,
+            index: 0,
+        }
+    }
 }
 
 impl From<Symbol> for Rule {
@@ -277,6 +292,7 @@ impl TokenSet {
         Self {
             terminal_bits: SmallBitVec::new(),
             external_bits: SmallBitVec::new(),
+            end: false,
             eof: false,
             end_of_nonterminal_extra: false,
         }
@@ -305,7 +321,8 @@ impl TokenSet {
                         }
                     }),
             )
-            .chain(if self.eof { Some(Symbol::end()) } else { None })
+            .chain(if self.end { Some(Symbol::end()) } else { None })
+            .chain(if self.eof { Some(Symbol::eof()) } else { None })
             .chain(if self.end_of_nonterminal_extra {
                 Some(Symbol::end_of_nonterminal_extra())
             } else {
@@ -331,7 +348,8 @@ impl TokenSet {
             SymbolType::NonTerminal => panic!("Cannot store non-terminals in a TokenSet"),
             SymbolType::Terminal => self.terminal_bits.get(symbol.index).unwrap_or(false),
             SymbolType::External => self.external_bits.get(symbol.index).unwrap_or(false),
-            SymbolType::End => self.eof,
+            SymbolType::End => self.end,
+            SymbolType::EOF => self.eof,
             SymbolType::EndOfNonTerminalExtra => self.end_of_nonterminal_extra,
         }
     }
@@ -346,6 +364,10 @@ impl TokenSet {
             SymbolType::Terminal => &mut self.terminal_bits,
             SymbolType::External => &mut self.external_bits,
             SymbolType::End => {
+                self.end = true;
+                return;
+            }
+            SymbolType::EOF => {
                 self.eof = true;
                 return;
             }
@@ -366,6 +388,14 @@ impl TokenSet {
             SymbolType::Terminal => &mut self.terminal_bits,
             SymbolType::External => &mut self.external_bits,
             SymbolType::End => {
+                return if self.end {
+                    self.end = false;
+                    true
+                } else {
+                    false
+                }
+            }
+            SymbolType::EOF => {
                 return if self.eof {
                     self.eof = false;
                     true
@@ -390,7 +420,7 @@ impl TokenSet {
     }
 
     pub fn is_empty(&self) -> bool {
-        !self.eof
+        !self.end
             && !self.end_of_nonterminal_extra
             && !self.terminal_bits.iter().any(|a| a)
             && !self.external_bits.iter().any(|a| a)
@@ -426,9 +456,9 @@ impl TokenSet {
 
     pub fn insert_all(&mut self, other: &Self) -> bool {
         let mut result = false;
-        if other.eof {
-            result |= !self.eof;
-            self.eof = true;
+        if other.end {
+            result |= !self.end;
+            self.end = true;
         }
         if other.end_of_nonterminal_extra {
             result |= !self.end_of_nonterminal_extra;

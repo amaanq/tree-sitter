@@ -28,6 +28,7 @@ use super::{
     rules::{AliasMap, Precedence, Rule, Symbol},
 };
 
+#[derive(Debug)]
 pub struct IntermediateGrammar<T, U> {
     variables: Vec<Variable>,
     extra_symbols: Vec<T>,
@@ -78,8 +79,13 @@ pub fn prepare_grammar(
 
     let interned_grammar = intern_symbols(input_grammar)?;
     let (syntax_grammar, lexical_grammar) = extract_tokens(interned_grammar)?;
+    println!("1syntax_grammar: {syntax_grammar:#?}");
+    println!("1lexical_grammar: {lexical_grammar:#?}");
     let syntax_grammar = expand_repeats(syntax_grammar);
+    println!("2syntax_grammar: {syntax_grammar:#?}");
     let mut syntax_grammar = flatten_grammar(syntax_grammar)?;
+    println!("3syntax_grammar: {syntax_grammar:#?}");
+    println!("3lexical_grammar: {lexical_grammar:#?}");
     let lexical_grammar = expand_tokens(lexical_grammar)?;
     let default_aliases = extract_default_aliases(&mut syntax_grammar, &lexical_grammar);
     let inlines = process_inlines(&syntax_grammar, &lexical_grammar)?;

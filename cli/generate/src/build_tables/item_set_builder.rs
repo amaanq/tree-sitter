@@ -5,7 +5,7 @@ use std::{
 
 use super::item::{ParseItem, ParseItemDisplay, ParseItemSet, TokenSetDisplay};
 use crate::{
-    grammars::{InlinedProductionMap, LexicalGrammar, SyntaxGrammar},
+    grammars::{InlinedProductionMap, LexicalGrammar, SyntaxGrammar, VariableType},
     rules::{Symbol, SymbolType, TokenSet},
 };
 
@@ -57,10 +57,15 @@ impl<'a> ParseItemSetBuilder<'a> {
         //
         // For a terminal symbol, the FIRST and LAST set just consists of the
         // terminal itself.
-        for i in 0..lexical_grammar.variables.len() {
-            let symbol = Symbol::terminal(i);
+        for (i, v) in lexical_grammar.variables.iter().enumerate() {
+            let symbol = if v.kind == VariableType::EOF {
+                Symbol::eof()
+            } else {
+                Symbol::terminal(i)
+            };
             let mut set = TokenSet::new();
             set.insert(symbol);
+            println!("sym: {symbol:?}");
             result.first_sets.insert(symbol, set.clone());
             result.last_sets.insert(symbol, set);
         }
@@ -93,7 +98,11 @@ impl<'a> ParseItemSetBuilder<'a> {
             symbols_to_process.clear();
             symbols_to_process.push(symbol);
             while let Some(current_symbol) = symbols_to_process.pop() {
-                if current_symbol.is_terminal() || current_symbol.is_external() {
+                println!("current_symbol: {:#?}", current_symbol);
+                if current_symbol.is_terminal()
+                    || current_symbol.is_external()
+                    || current_symbol.is_eof()
+                {
                     first_set.insert(current_symbol);
                 } else if processed_non_terminals.insert(current_symbol) {
                     for production in &syntax_grammar.variables[current_symbol.index].productions {
@@ -110,7 +119,11 @@ impl<'a> ParseItemSetBuilder<'a> {
             symbols_to_process.clear();
             symbols_to_process.push(symbol);
             while let Some(current_symbol) = symbols_to_process.pop() {
-                if current_symbol.is_terminal() || current_symbol.is_external() {
+                println!("current_symbol2: {:#?}", current_symbol);
+                if current_symbol.is_terminal()
+                    || current_symbol.is_external()
+                    || current_symbol.is_eof()
+                {
                     last_set.insert(current_symbol);
                 } else if processed_non_terminals.insert(current_symbol) {
                     for production in &syntax_grammar.variables[current_symbol.index].productions {
@@ -259,6 +272,7 @@ impl<'a> ParseItemSetBuilder<'a> {
     }
 
     pub fn first_set(&self, symbol: &Symbol) -> &TokenSet {
+        println!("symbol: {symbol:?}");
         &self.first_sets[symbol]
     }
 
@@ -300,6 +314,7 @@ impl fmt::Debug for ParseItemSetBuilder<'_> {
                 SymbolType::External => &self.syntax_grammar.external_tokens[symbol.index].name,
                 SymbolType::Terminal => &self.lexical_grammar.variables[symbol.index].name,
                 SymbolType::End | SymbolType::EndOfNonTerminalExtra => "END",
+                SymbolType::EOF => "EOF",
             };
             writeln!(
                 f,
@@ -316,6 +331,7 @@ impl fmt::Debug for ParseItemSetBuilder<'_> {
                 SymbolType::External => &self.syntax_grammar.external_tokens[symbol.index].name,
                 SymbolType::Terminal => &self.lexical_grammar.variables[symbol.index].name,
                 SymbolType::End | SymbolType::EndOfNonTerminalExtra => "END",
+                SymbolType::EOF => "EOF",
             };
             writeln!(
                 f,

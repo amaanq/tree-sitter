@@ -122,6 +122,7 @@ pub(super) fn expand_repeats(mut grammar: ExtractedSyntaxGrammar) -> ExtractedSy
     }
 
     grammar.variables.extend(expander.auxiliary_variables);
+    println!("expanded grammar: {grammar:#?}");
     grammar
 }
 

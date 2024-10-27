@@ -26,6 +26,7 @@ pub enum NfaState {
     Accept {
         variable_index: usize,
         precedence: i32,
+        eof: bool,
     },
 }
 
@@ -557,6 +558,7 @@ impl<'a> NfaCursor<'a> {
             if let NfaState::Accept {
                 variable_index,
                 precedence,
+                eof,
             } = self.nfa.states[*state_id as usize]
             {
                 Some((variable_index, precedence))

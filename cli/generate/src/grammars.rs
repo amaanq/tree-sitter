@@ -11,6 +11,7 @@ pub enum VariableType {
     Auxiliary,
     Anonymous,
     Named,
+    EOF,
 }
 
 // Input grammar
@@ -74,7 +75,7 @@ pub struct Production {
     pub dynamic_precedence: i32,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct InlinedProductionMap {
     pub productions: Vec<Production>,
     pub production_map: HashMap<(*const Production, u32), Vec<usize>>,

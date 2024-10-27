@@ -148,7 +148,7 @@ pub(super) fn extract_tokens(
         word_token = Some(token);
     }
 
-    Ok((
+    let r = Ok((
         ExtractedSyntaxGrammar {
             variables,
             expected_conflicts,
@@ -163,7 +163,9 @@ pub(super) fn extract_tokens(
             variables: lexical_variables,
             separators,
         },
-    ))
+    ));
+    println!("{:#?}", r);
+    r
 }
 
 struct TokenExtractor {
@@ -237,11 +239,21 @@ impl TokenExtractor {
                     .map(|e| self.extract_tokens_in_rule(e))
                     .collect::<Result<Vec<_>>>()?,
             )),
+            Rule::EOF => self.extract_token(input, None).map(|_| Rule::EOF),
             _ => Ok(input.clone()),
         }
     }
 
     fn extract_token(&mut self, rule: &Rule, string_value: Option<&String>) -> Result<Symbol> {
+        if *rule == Rule::EOF {
+            self.extracted_variables.push(Variable {
+                name: "EOF".to_string(),
+                kind: VariableType::EOF,
+                rule: rule.clone(),
+            });
+            return Ok(Symbol::eof());
+        }
+
         for (i, variable) in self.extracted_variables.iter_mut().enumerate() {
             if variable.rule == *rule {
                 self.extracted_usage_counts[i] += 1;

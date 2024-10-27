@@ -176,6 +176,12 @@ token.immediate = function(value) {
   };
 }
 
+function eof() {
+  return {
+    type: "EOF"
+  };
+}
+
 function normalize(value) {
   if (typeof value == "undefined")
     throw new Error("Undefined symbol");
@@ -481,6 +487,7 @@ globalThis.repeat1 = repeat1;
 globalThis.seq = seq;
 globalThis.sym = sym;
 globalThis.token = token;
+globalThis.eof = eof;
 globalThis.grammar = grammar;
 globalThis.field = field;
 

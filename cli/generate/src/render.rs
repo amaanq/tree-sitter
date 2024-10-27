@@ -151,6 +151,7 @@ impl Generator {
     fn init(&mut self) {
         let mut symbol_identifiers = HashSet::new();
         for i in 0..self.parse_table.symbols.len() {
+            println!("sym {i}: {:?}", self.parse_table.symbols[i]);
             self.assign_symbol_id(self.parse_table.symbols[i], &mut symbol_identifiers);
         }
         self.symbol_ids.insert(
@@ -322,7 +323,7 @@ impl Generator {
             .symbols
             .iter()
             .filter(|symbol| {
-                if symbol.is_terminal() || symbol.is_eof() {
+                if symbol.is_terminal() || symbol.is_end() || symbol.is_eof() {
                     true
                 } else if symbol.is_external() {
                     self.syntax_grammar.external_tokens[symbol.index]
@@ -493,7 +494,7 @@ impl Generator {
                             add_line!(self, ".supertype = true,");
                         }
                     }
-                    VariableType::Auxiliary => {
+                    VariableType::Auxiliary | VariableType::EOF => {
                         add_line!(self, ".visible = false,");
                         add_line!(self, ".named = false,");
                     }
@@ -722,6 +723,7 @@ impl Generator {
     }
 
     fn add_lex_state(&mut self, _state_ix: usize, state: LexState) {
+        println!("adding {state:?}");
         if let Some(accept_action) = state.accept_action {
             add_line!(self, "ACCEPT_TOKEN({});", self.symbol_ids[&accept_action]);
         }
@@ -1233,6 +1235,7 @@ impl Generator {
                     symbols.sort_unstable();
                     indent!(self);
                     for symbol in symbols {
+                        println!("symbol: {:?}", symbol);
                         add_line!(self, "{},", self.symbol_ids[symbol]);
                     }
                     dedent!(self);
@@ -1503,6 +1506,7 @@ impl Generator {
                 VariableType::Hidden | VariableType::Named => {
                     format!("sym_{}", self.sanitize_identifier(name))
                 }
+                VariableType::EOF => "aux_sym_eof".to_string(),
             };
 
             let mut suffix_number = 1;
@@ -1538,6 +1542,7 @@ impl Generator {
                 let token = &self.syntax_grammar.external_tokens[symbol.index];
                 (&token.name, token.kind)
             }
+            SymbolType::EOF => ("eof", VariableType::Hidden),
         }
     }
 

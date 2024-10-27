@@ -40,6 +40,7 @@ pub fn build_lex_table(
 
     let mut parse_state_ids_by_token_set = Vec::<(TokenSet, Vec<ParseStateId>)>::new();
     for (i, state) in parse_table.states.iter().enumerate() {
+        println!("ptstate: {:?}", state.terminal_entries);
         let tokens = state
             .terminal_entries
             .keys()
@@ -50,7 +51,7 @@ pub fn build_lex_table(
                     } else {
                         Some(*token)
                     }
-                } else if token.is_eof() {
+                } else if token.is_end() || token.is_eof() {
                     Some(*token)
                 } else {
                     None
@@ -58,7 +59,13 @@ pub fn build_lex_table(
             })
             .collect();
 
+        println!("tokens: {:?}", tokens);
+
         let mut did_merge = false;
+        println!(
+            "parse_state_ids_by_token_set: {:?}",
+            parse_state_ids_by_token_set
+        );
         for entry in &mut parse_state_ids_by_token_set {
             if merge_token_set(
                 &mut entry.0,
@@ -69,9 +76,15 @@ pub fn build_lex_table(
             ) {
                 did_merge = true;
                 entry.1.push(i);
+                println!(
+                    "post_merge: parse_state_ids_by_token_set: {:?}",
+                    parse_state_ids_by_token_set
+                );
                 break;
             }
         }
+
+        println!("did_merge: {:?}", did_merge);
 
         if !did_merge {
             parse_state_ids_by_token_set.push((tokens, vec![i]));

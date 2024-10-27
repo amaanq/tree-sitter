@@ -36,7 +36,9 @@ pub(super) fn extract_default_aliases(
                 let status = match step.symbol.kind {
                     SymbolType::External => &mut external_status_list[step.symbol.index],
                     SymbolType::NonTerminal => &mut non_terminal_status_list[step.symbol.index],
-                    SymbolType::Terminal => &mut terminal_status_list[step.symbol.index],
+                    SymbolType::Terminal | SymbolType::EOF => {
+                        &mut terminal_status_list[step.symbol.index]
+                    }
                     SymbolType::End | SymbolType::EndOfNonTerminalExtra => {
                         panic!("Unexpected end token")
                     }
@@ -68,7 +70,7 @@ pub(super) fn extract_default_aliases(
         let status = match symbol.kind {
             SymbolType::External => &mut external_status_list[symbol.index],
             SymbolType::NonTerminal => &mut non_terminal_status_list[symbol.index],
-            SymbolType::Terminal => &mut terminal_status_list[symbol.index],
+            SymbolType::Terminal | SymbolType::EOF => &mut terminal_status_list[symbol.index],
             SymbolType::End | SymbolType::EndOfNonTerminalExtra => {
                 panic!("Unexpected end token")
             }
@@ -124,7 +126,9 @@ pub(super) fn extract_default_aliases(
                 let status = match step.symbol.kind {
                     SymbolType::External => &mut external_status_list[step.symbol.index],
                     SymbolType::NonTerminal => &mut non_terminal_status_list[step.symbol.index],
-                    SymbolType::Terminal => &mut terminal_status_list[step.symbol.index],
+                    SymbolType::Terminal | SymbolType::EOF => {
+                        &mut terminal_status_list[step.symbol.index]
+                    }
                     SymbolType::End | SymbolType::EndOfNonTerminalExtra => {
                         panic!("Unexpected end token")
                     }

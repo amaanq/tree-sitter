@@ -116,6 +116,8 @@ fn generate_parser_for_grammar_with_opts(
 ) -> Result<GeneratedParser> {
     let (syntax_grammar, lexical_grammar, inlines, simple_aliases) =
         prepare_grammar(input_grammar)?;
+    println!("syntax_grammar: {:#?}", syntax_grammar);
+    println!("lexical_grammar: {:#?}", lexical_grammar);
     let variable_info =
         node_types::get_variable_info(&syntax_grammar, &lexical_grammar, &simple_aliases)?;
     let node_types_json = node_types::generate_node_types_json(

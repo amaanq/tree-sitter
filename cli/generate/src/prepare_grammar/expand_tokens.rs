@@ -41,6 +41,7 @@ const fn get_completion_precedence(rule: &Rule) -> i32 {
 }
 
 pub fn expand_tokens(mut grammar: ExtractedLexicalGrammar) -> Result<LexicalGrammar> {
+    println!("grammar: {:#?}", grammar);
     let mut builder = NfaBuilder {
         nfa: Nfa::new(),
         is_sep: true,
@@ -65,6 +66,7 @@ pub fn expand_tokens(mut grammar: ExtractedLexicalGrammar) -> Result<LexicalGram
         builder.nfa.states.push(NfaState::Accept {
             variable_index: i,
             precedence: get_completion_precedence(&variable.rule),
+            eof: false,
         });
         let last_state_id = builder.nfa.last_state_id();
         builder
@@ -153,6 +155,7 @@ impl NfaBuilder {
                 self.nfa.states.push(NfaState::Accept {
                     variable_index: 0,
                     precedence: 0,
+                    eof: false,
                 }); // Placeholder for split
                 let split_state_id = self.nfa.last_state_id();
                 if self.expand_rule(rule, split_state_id)? {
@@ -176,7 +179,7 @@ impl NfaBuilder {
                 }
                 result
             }
-            Rule::Blank => Ok(false),
+            Rule::Blank | Rule::EOF => Ok(false),
             _ => Err(anyhow!("Grammar error: Unexpected rule {rule:?}")),
         }
     }
@@ -285,6 +288,7 @@ impl NfaBuilder {
         self.nfa.states.push(NfaState::Accept {
             variable_index: 0,
             precedence: 0,
+            eof: false,
         }); // Placeholder for split
         let split_state_id = self.nfa.last_state_id();
         if self.expand_regex(hir, split_state_id)? {
