@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anyhow::{anyhow, Context, Result};
 use indoc::indoc;
 use regex_syntax::{
@@ -57,16 +59,7 @@ pub fn expand_tokens(mut grammar: ExtractedLexicalGrammar) -> Result<LexicalGram
 
     let mut variables = Vec::new();
     for (i, variable) in grammar.variables.into_iter().enumerate() {
-        if variable.rule.is_empty() {
-            return Err(anyhow!(
-                indoc! {"
-                The rule `{}` matches the empty string.
-                Tree-sitter does not support syntactic rules that match the empty string
-                unless they are used only as the grammar's start rule.
-            "},
-                variable.name
-            ));
-        }
+        // println!("variable!: {:#?}", variable);
 
         let is_immediate_token = match &variable.rule {
             Rule::Metadata { params, .. } => params.is_main_token,
@@ -97,6 +90,14 @@ pub fn expand_tokens(mut grammar: ExtractedLexicalGrammar) -> Result<LexicalGram
         });
     }
 
+    println!("NFA: {:#?}", builder.nfa);
+    let ret = builder.allows_empty_string();
+    println!("ret: {}", ret);
+    assert!(!ret, "wut");
+
+    // println!("NFA: {:#?}", builder.nfa);
+    // println!("variables: {:#?}", variables);
+
     Ok(LexicalGrammar {
         nfa: builder.nfa,
         variables,
@@ -104,6 +105,51 @@ pub fn expand_tokens(mut grammar: ExtractedLexicalGrammar) -> Result<LexicalGram
 }
 
 impl NfaBuilder {
+    fn allows_empty_string(&self) -> bool {
+        let start_state = self.nfa.last_state_id();
+        let mut states_to_check = vec![(start_state, false)]; // (state_id, consumed_input)
+        let mut visited = HashSet::new();
+
+        while let Some((state_id, consumed_input)) = states_to_check.pop() {
+            if visited.contains(&(state_id, consumed_input)) {
+                continue;
+            }
+            visited.insert((state_id, consumed_input));
+
+            println!("checking state: {state_id} (consumed: {consumed_input})");
+
+            match &self.nfa.states[state_id as usize] {
+                NfaState::Accept { variable_index, .. } => {
+                    println!("found accept state {variable_index} with consumed: {consumed_input}");
+                    if !consumed_input && *variable_index != 0 {
+                        return true;
+                    }
+                }
+                NfaState::Split(next1, next2) => {
+                    println!("split {state_id} -> {next1} or {next2}");
+                    states_to_check.push((*next1, consumed_input));
+                    states_to_check.push((*next2, consumed_input));
+                }
+                NfaState::Advance {
+                    state_id: next_state,
+                    is_sep,
+                    ..
+                } => {
+                    if *is_sep {
+                        // For separators, just continue to next state without changing consumed
+                        // status
+                        states_to_check.push((*next_state, consumed_input));
+                    } else {
+                        // Only non-separator advances count
+                        states_to_check.push((*next_state, true));
+                    }
+                    println!("advance {state_id} -> {next_state} (sep: {is_sep}, consumed: {consumed_input})");
+                }
+            }
+        }
+        false
+    }
+
     fn expand_rule(&mut self, rule: &Rule, mut next_state_id: u32) -> Result<bool> {
         match rule {
             Rule::Pattern(s, f) => {
