@@ -3080,7 +3080,10 @@ void ts_query_cursor_exec(
   self->did_exceed_match_limit = false;
   self->operation_count = 0;
   if (self->timeout_duration) {
-    self->end_clock = clock_after(clock_now(), self->timeout_duration);
+    TSClock now = clock_now();
+    printf("setting clock now: %llu\n", now);
+    self->end_clock = clock_after(now, self->timeout_duration);
+    printf("end_clock is: %llu, which is %llu after now\n", self->end_clock, self->timeout_duration);
   } else {
     self->end_clock = clock_null();
   }
@@ -3512,18 +3515,42 @@ static inline bool ts_query_cursor__advance(
     if (self->query_options && self->query_options->progress_callback) {
       self->query_state.current_byte_offset = ts_node_start_byte(ts_tree_cursor_current_node(&self->cursor));
     }
-    if (
-      did_match ||
-      self->halted ||
-      (
-        self->operation_count == 0 &&
-        (
-          (!clock_is_null(self->end_clock) && clock_is_gt(clock_now(), self->end_clock)) ||
-          (self->query_options && self->query_options->progress_callback && self->query_options->progress_callback(&self->query_state))
-        )
-      )
-    ) {
+    // if (
+    //   did_match ||
+    //   self->halted ||
+    //   (
+    //     self->operation_count == 0 &&
+    //     (
+    //       (!clock_is_null(self->end_clock) && clock_is_gt(clock_now(), self->end_clock)) ||
+    //       (self->query_options && self->query_options->progress_callback && self->query_options->progress_callback(&self->query_state))
+    //     )
+    //   )
+    // ) {
+    //   return did_match;
+    // }
+    if (did_match) {
       return did_match;
+    }
+    if (self->halted) {
+      return did_match;
+    }
+    if (self->operation_count == 0) {
+      TSClock now = clock_now();
+      if (
+        !clock_is_null(self->end_clock) &&
+        clock_is_gt(now, self->end_clock)
+      ) {
+        printf("timeout, now: %llu, end: %llu\n", now, self->end_clock);
+        return did_match;
+      }
+      if (
+        self->query_options &&
+        self->query_options->progress_callback &&
+        self->query_options->progress_callback(&self->query_state)
+      ) {
+        printf("progress\n");
+        return did_match;
+      }
     }
 
     // Exit the current node.
