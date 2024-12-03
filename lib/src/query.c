@@ -3481,15 +3481,38 @@ static inline bool ts_query_cursor__advance(
     if (++self->operation_count == OP_COUNT_PER_QUERY_TIMEOUT_CHECK) {
       self->operation_count = 0;
     }
-    if (
-      did_match ||
-      self->halted ||
-      (
-        self->operation_count == 0 &&
-        !clock_is_null(self->end_clock) && clock_is_gt(clock_now(), self->end_clock)
-      )
-    ) {
+
+    // if (self->query_options && self->query_options->progress_callback) {
+    //   self->query_state.current_byte_offset = ts_node_start_byte(ts_tree_cursor_current_node(&self->cursor));
+    // }
+    // if (
+    //   did_match ||
+    //   self->halted ||
+    //   (
+    //     self->operation_count == 0 &&
+    //     (
+    //       (!clock_is_null(self->end_clock) && clock_is_gt(clock_now(), self->end_clock)) ||
+    //       (self->query_options && self->query_options->progress_callback && self->query_options->progress_callback(&self->query_state))
+    //     )
+    //   )
+    // ) {
+    //   return did_match;
+    // }
+    if (did_match) {
       return did_match;
+    }
+    if (self->halted) {
+      printf("halted\n");
+      return did_match;
+    }
+    if (self->operation_count == 0) {
+      if (
+        !clock_is_null(self->end_clock) &&
+        clock_is_gt(clock_now(), self->end_clock)
+      ) {
+        printf("timeout\n");
+        return did_match;
+      }
     }
 
     // Exit the current node.
