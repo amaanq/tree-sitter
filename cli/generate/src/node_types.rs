@@ -1,7 +1,4 @@
-use std::{
-    cmp::Ordering,
-    collections::{BTreeMap, HashMap, HashSet},
-};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::Result;
 use serde::Serialize;
@@ -185,7 +182,11 @@ pub fn get_variable_info(
         did_change = false;
 
         for (i, variable) in syntax_grammar.variables.iter().enumerate() {
+            let print = true;
             let mut variable_info = result[i].clone();
+            if print {
+                println!("variable: {}", variable.name);
+            }
 
             // Examine each of the variable's productions. The variable's child types can be
             // immediately combined across all productions, but the child quantities must be
@@ -204,19 +205,33 @@ pub fn get_variable_info(
                     let child_symbol = step.symbol;
                     let child_type = if let Some(alias) = &step.alias {
                         ChildType::Aliased(alias.clone())
-                    } else if let Some(alias) = default_aliases.get(&step.symbol) {
+                    } else if let Some(alias) = default_aliases.get(&child_symbol) {
                         ChildType::Aliased(alias.clone())
                     } else {
                         ChildType::Normal(child_symbol)
                     };
 
-                    let child_is_hidden = !child_type_is_visible(&child_type)
-                        && !syntax_grammar.supertype_symbols.contains(&child_symbol);
+                    let child_is_hidden = !child_type_is_visible(&child_type);
+
+                    let sym_name = match child_symbol.kind {
+                        SymbolType::NonTerminal => {
+                            &syntax_grammar.variables[child_symbol.index].name
+                        }
+                        SymbolType::Terminal => &lexical_grammar.variables[child_symbol.index].name,
+                        _ => "",
+                    };
+                    if print {
+                        println!("child symbol {}, is hidden: {}", sym_name, child_is_hidden);
+                    }
 
                     // Maintain the set of all child types for this variable, and the quantity of
                     // visible children in this production.
+                    let was_false = !did_change;
                     did_change |=
                         extend_sorted(&mut variable_info.children.types, Some(&child_type));
+                    if was_false && did_change && print {
+                        println!("did change 1");
+                    }
                     if !child_is_hidden {
                         production_children_quantity.append(ChildQuantity::one());
                     }
@@ -228,7 +243,11 @@ pub fn get_variable_info(
                             .fields
                             .entry(field_name.clone())
                             .or_insert_with(FieldInfo::default);
+                        let was_false = !did_change;
                         did_change |= extend_sorted(&mut field_info.types, Some(&child_type));
+                        if was_false && did_change && print {
+                            println!("did change 2");
+                        }
 
                         let production_field_quantity = production_field_quantities
                             .entry(field_name)
@@ -238,10 +257,14 @@ pub fn get_variable_info(
                         // fields.
                         if child_is_hidden && child_symbol.is_non_terminal() {
                             let child_variable_info = &result[child_symbol.index];
+                            let was_false = !did_change;
                             did_change |= extend_sorted(
                                 &mut field_info.types,
                                 &child_variable_info.children.types,
                             );
+                            if was_false && did_change && print {
+                                println!("did change 3");
+                            }
                             production_field_quantity.append(child_variable_info.children.quantity);
                         } else {
                             production_field_quantity.append(ChildQuantity::one());
@@ -250,15 +273,30 @@ pub fn get_variable_info(
                     // Maintain the set of named children without fields within this variable.
                     else if child_type_is_named(&child_type) {
                         production_children_without_fields_quantity.append(ChildQuantity::one());
+                        let was_false = !did_change;
                         did_change |= extend_sorted(
                             &mut variable_info.children_without_fields.types,
                             Some(&child_type),
                         );
+                        if was_false && did_change && print {
+                            println!("did change 4");
+                        }
                     }
 
                     // Inherit all child information from hidden children.
+                    if print {
+                        println!("child_is_hidden: {}", child_is_hidden);
+                        println!(
+                            "child_symbol.is_non_terminal(): {}",
+                            child_symbol.is_non_terminal()
+                        );
+                    }
                     if child_is_hidden && child_symbol.is_non_terminal() {
                         let child_variable_info = &result[child_symbol.index];
+
+                        if print {
+                            println!("child_variable_info: {child_variable_info:#?}");
+                        }
 
                         // If a hidden child can have multiple children, then its parent node can
                         // appear to have multiple children.
@@ -273,6 +311,7 @@ pub fn get_variable_info(
                                 .entry(field_name)
                                 .or_insert_with(ChildQuantity::zero)
                                 .append(child_field_info.quantity);
+                            let was_false = !did_change;
                             did_change |= extend_sorted(
                                 &mut variable_info
                                     .fields
@@ -281,15 +320,22 @@ pub fn get_variable_info(
                                     .types,
                                 &child_field_info.types,
                             );
+                            if was_false && did_change && print {
+                                println!("did change 5");
+                            }
                         }
 
                         // If a hidden child has children, then the parent node can appear to have
                         // those same children.
                         production_children_quantity.append(child_variable_info.children.quantity);
+                        let was_false = !did_change;
                         did_change |= extend_sorted(
                             &mut variable_info.children.types,
                             &child_variable_info.children.types,
                         );
+                        if was_false && did_change && print {
+                            println!("did change 6");
+                        }
 
                         // If a hidden child can have named children without fields, then the parent
                         // node can appear to have those same children.
@@ -298,10 +344,14 @@ pub fn get_variable_info(
                             if !grandchildren_info.types.is_empty() {
                                 production_children_without_fields_quantity
                                     .append(child_variable_info.children_without_fields.quantity);
+                                let was_false = !did_change;
                                 did_change |= extend_sorted(
                                     &mut variable_info.children_without_fields.types,
                                     &child_variable_info.children_without_fields.types,
                                 );
+                                if was_false && did_change && print {
+                                    println!("did change 7");
+                                }
                             }
                         }
                     }
@@ -317,23 +367,35 @@ pub fn get_variable_info(
                 // then expand the quantity information with all of the possibilities introduced
                 // by this production.
                 if !production_has_uninitialized_invisible_children {
+                    let was_false = !did_change;
                     did_change |= variable_info
                         .children
                         .quantity
                         .union(production_children_quantity);
+                    if was_false && did_change && print {
+                        println!("did change 8");
+                    }
 
+                    let was_false = !did_change;
                     did_change |= variable_info
                         .children_without_fields
                         .quantity
                         .union(production_children_without_fields_quantity);
+                    if was_false && did_change && print {
+                        println!("did change 9");
+                    }
 
                     for (field_name, info) in &mut variable_info.fields {
+                        let was_false = !did_change;
                         did_change |= info.quantity.union(
                             production_field_quantities
                                 .get(field_name)
                                 .copied()
                                 .unwrap_or_else(ChildQuantity::zero),
                         );
+                        if was_false && did_change && print {
+                            println!("did change 10");
+                        }
                     }
                 }
             }
@@ -352,22 +414,24 @@ pub fn get_variable_info(
     }
 
     // Update all of the node type lists to eliminate hidden nodes.
-    for supertype_symbol in &syntax_grammar.supertype_symbols {
-        result[supertype_symbol.index]
-            .children
-            .types
-            .retain(child_type_is_visible);
-    }
-    for variable_info in &mut result {
-        for field_info in variable_info.fields.values_mut() {
-            field_info.types.retain(child_type_is_visible);
-        }
-        variable_info.fields.retain(|_, v| !v.types.is_empty());
-        variable_info
-            .children_without_fields
-            .types
-            .retain(child_type_is_visible);
-    }
+    // for supertype_symbol in &syntax_grammar.supertype_symbols {
+    //     result[supertype_symbol.index]
+    //         .children
+    //         .types
+    //         .retain(child_type_is_visible);
+    // }
+    // for variable_info in &mut result {
+    //     for field_info in variable_info.fields.values_mut() {
+    //         field_info.types.retain(child_type_is_visible);
+    //     }
+    //     variable_info.fields.retain(|_, v| !v.types.is_empty());
+    //     variable_info
+    //         .children_without_fields
+    //         .types
+    //         .retain(child_type_is_visible);
+    // }
+
+    println!("result: {result:#?}");
 
     Ok(result)
 }
@@ -509,33 +573,34 @@ pub fn generate_node_types_json(
     for (i, info) in variable_info.iter().enumerate() {
         let symbol = Symbol::non_terminal(i);
         let variable = &syntax_grammar.variables[i];
-        if syntax_grammar.supertype_symbols.contains(&symbol) {
-            let node_type_json =
-                node_types_json
-                    .entry(variable.name.clone())
-                    .or_insert_with(|| NodeInfoJSON {
-                        kind: variable.name.clone(),
-                        named: true,
-                        root: false,
-                        fields: None,
-                        children: None,
-                        subtypes: None,
-                    });
-            let mut subtypes = info
-                .children
-                .types
-                .iter()
-                .map(child_type_to_node_type)
-                .collect::<Vec<_>>();
-            subtypes.sort_unstable();
-            subtypes.dedup();
-            let supertype = NodeTypeJSON {
-                kind: node_type_json.kind.clone(),
-                named: true,
-            };
-            subtype_map.push((supertype, subtypes.clone()));
-            node_type_json.subtypes = Some(subtypes);
-        } else if !syntax_grammar.variables_to_inline.contains(&symbol) {
+        // if syntax_grammar.supertype_symbols.contains(&symbol) {
+        //     let node_type_json =
+        //         node_types_json
+        //             .entry(variable.name.clone())
+        //             .or_insert_with(|| NodeInfoJSON {
+        //                 kind: variable.name.clone(),
+        //                 named: true,
+        //                 root: false,
+        //                 fields: None,
+        //                 children: None,
+        //                 subtypes: None,
+        //             });
+        //     let mut subtypes = info
+        //         .children
+        //         .types
+        //         .iter()
+        //         .map(child_type_to_node_type)
+        //         .collect::<Vec<_>>();
+        //     subtypes.sort_unstable();
+        //     subtypes.dedup();
+        //     let supertype = NodeTypeJSON {
+        //         kind: node_type_json.kind.clone(),
+        //         named: true,
+        //     };
+        //     subtype_map.push((supertype, subtypes.clone()));
+        //     node_type_json.subtypes = Some(subtypes);
+        // } else
+        if !syntax_grammar.variables_to_inline.contains(&symbol) {
             // If a rule is aliased under multiple names, then its information
             // contributes to multiple entries in the final JSON.
             for alias in aliases_by_symbol.get(&symbol).unwrap_or(&HashSet::new()) {
@@ -599,15 +664,15 @@ pub fn generate_node_types_json(
     }
 
     // Sort the subtype map so that subtypes are listed before their supertypes.
-    subtype_map.sort_by(|a, b| {
-        if b.1.contains(&a.0) {
-            Ordering::Less
-        } else if a.1.contains(&b.0) {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
-    });
+    // subtype_map.sort_by(|a, b| {
+    //     if b.1.contains(&a.0) {
+    //         Ordering::Less
+    //     } else if a.1.contains(&b.0) {
+    //         Ordering::Greater
+    //     } else {
+    //         Ordering::Equal
+    //     }
+    // });
 
     for node_type_json in node_types_json.values_mut() {
         if node_type_json
@@ -621,6 +686,7 @@ pub fn generate_node_types_json(
         if let Some(children) = &mut node_type_json.children {
             process_supertypes(children, &subtype_map);
         }
+        println!("fields: {:#?}", node_type_json.fields);
         if let Some(fields) = &mut node_type_json.fields {
             for field_info in fields.values_mut() {
                 process_supertypes(field_info, &subtype_map);
@@ -719,9 +785,11 @@ pub fn generate_node_types_json(
 
 fn process_supertypes(info: &mut FieldInfoJSON, subtype_map: &[(NodeTypeJSON, Vec<NodeTypeJSON>)]) {
     for (supertype, subtypes) in subtype_map {
+        println!("fields before: {info:#?}");
         if info.types.contains(supertype) {
             info.types.retain(|t| !subtypes.contains(t));
         }
+        println!("fields after: {info:#?}");
     }
 }
 

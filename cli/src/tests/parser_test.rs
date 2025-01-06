@@ -1927,6 +1927,29 @@ fn test_grammars_that_should_not_compile() {
     .is_err());
 }
 
+// #[test]
+// fn test_idk() {
+//     let mut code = b"f().a;".to_vec();
+//     let language = get_language("javascript");
+//     let mut parser = Parser::new();
+//     parser.set_language(&language).unwrap();
+//
+//     let mut tree = parser.parse(&code, None).unwrap();
+//
+//     let edit = Edit {
+//         position: 5,
+//         deleted_length: 0,
+//         inserted_text: b"b".to_vec(),
+//     };
+//     perform_edit(&mut tree, &mut code, &edit).unwrap();
+//
+//     let new_tree = parser.parse(&code, Some(&tree)).unwrap();
+//     let changed_ranges = tree.changed_ranges(&new_tree).collect::<Vec<_>>();
+//     println!("{:?}", changed_ranges);
+//     assert_eq!(changed_ranges.len(), 1);
+//     assert_eq!(changed_ranges[0], simple_range(4, 6));
+// }
+
 const fn simple_range(start: usize, end: usize) -> Range {
     Range {
         start_byte: start,

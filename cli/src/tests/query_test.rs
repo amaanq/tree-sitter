@@ -5578,3 +5578,45 @@ const foo = [
     assert_eq!(matches.len(), 1);
     assert_eq!(matches[0].1, captures);
 }
+
+#[test]
+fn test_idk() {
+    let language = get_language("go");
+    let mut parser = Parser::new();
+    parser.set_language(&language).unwrap();
+
+    let source_code = "
+// Package main is my test package.
+package main
+
+func a() {
+}
+
+// Hello
+type b struct{}
+
+func c() {
+	type d struct{}
+}
+";
+
+    let query = Query::new(
+        &language,
+        "(source_file
+           (
+             (comment)
+             .
+             (type_declaration)
+           )@type
+        )",
+    )
+    .unwrap();
+
+    let tree = parser.parse(source_code, None).unwrap();
+    let mut cursor = QueryCursor::new();
+
+    let matches = cursor.matches(&query, tree.root_node(), source_code.as_bytes());
+    let matches = collect_matches(matches, &query, source_code);
+
+    println!("{:?}", matches);
+}

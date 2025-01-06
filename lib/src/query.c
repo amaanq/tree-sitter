@@ -1860,7 +1860,7 @@ static bool ts_query__analyze_patterns(TSQuery *self, unsigned *error_offset) {
     }
   }
 
-  #ifdef DEBUG_ANALYZE_QUERY
+  #ifdef DEBUG_EXECUTE_QUERY
     printf("Steps:\n");
     for (unsigned i = 0; i < self->steps.size; i++) {
       QueryStep *step = &self->steps.contents[i];
@@ -1868,7 +1868,7 @@ static bool ts_query__analyze_patterns(TSQuery *self, unsigned *error_offset) {
         printf("  %u: DONE\n", i);
       } else {
         printf(
-          "  %u: {symbol: %s, field: %s, depth: %u, parent_pattern_guaranteed: %d, root_pattern_guaranteed: %d}\n",
+          "  %u: {symbol: %s, field: %s, depth: %u, parent_pattern_guaranteed: %d, root_pattern_guaranteed: %d, is_immediate: %d\n",
           i,
           (step->symbol == WILDCARD_SYMBOL)
             ? "ANY"
@@ -1876,8 +1876,13 @@ static bool ts_query__analyze_patterns(TSQuery *self, unsigned *error_offset) {
           (step->field ? ts_language_field_name_for_id(self->language, step->field) : "-"),
           step->depth,
           step->parent_pattern_guaranteed,
-          step->root_pattern_guaranteed
+          step->root_pattern_guaranteed,
+          step->is_immediate
         );
+        for (unsigned i = 0; i < 3; i++) {
+          printf("    capture[%u]: %u\n", i, step->capture_ids[i]);
+        }
+        printf("  }\n");
       }
     }
   #endif
@@ -2190,6 +2195,7 @@ static TSQueryError ts_query__parse_pattern(
   if (stream->next == ')' || stream->next == ']') return PARENT_DONE;
 
   const uint32_t starting_step_index = self->steps.size;
+  bool added_grouping;
 
   // Store the byte offset of each step in the query.
   if (
@@ -2271,6 +2277,7 @@ static TSQueryError ts_query__parse_pattern(
 
     // If this parenthesis is followed by a node, then it represents a grouped sequence.
     if (stream->next == '(' || stream->next == '"' || stream->next == '[') {
+      added_grouping = stream->next == '(';
       bool child_is_immediate = is_immediate;
       CaptureQuantifiers child_capture_quantifiers = capture_quantifiers_new();
       for (;;) {
@@ -2706,6 +2713,8 @@ static TSQueryError ts_query__parse_pattern(
       capture_quantifiers_add_for_id(capture_quantifiers, capture_id, TSQuantifierOne);
 
       uint32_t step_index = starting_step_index;
+      // printf("starting step index: %u\n", step_index);
+      // printf("steps size: %u\n", self->steps.size);
       for (;;) {
         QueryStep *step = &self->steps.contents[step_index];
         query_step__add_capture(step, capture_id);
@@ -2716,6 +2725,14 @@ static TSQueryError ts_query__parse_pattern(
         ) {
           step_index = step->alternative_index;
         } else {
+          if (added_grouping && step->alternative_index == NONE) {
+            for (uint32_t j = starting_step_index + 1; j < self->steps.size; j++) {
+              QueryStep *grouping_step = &self->steps.contents[j];
+              if (grouping_step->alternative_index == NONE) {
+                query_step__add_capture(grouping_step, capture_id);
+              }
+            }
+          }
           break;
         }
       }
@@ -2943,14 +2960,16 @@ uint32_t ts_query_start_byte_for_pattern(
   const TSQuery *self,
   uint32_t pattern_index
 ) {
-  return self->patterns.contents[pattern_index].start_byte;
+  uint32_t ret = self->patterns.contents[pattern_index].start_byte;
+  return ret;
 }
 
 uint32_t ts_query_end_byte_for_pattern(
   const TSQuery *self,
   uint32_t pattern_index
 ) {
-  return self->patterns.contents[pattern_index].end_byte;
+  uint32_t ret = self->patterns.contents[pattern_index].end_byte;
+  return ret;
 }
 
 bool ts_query_is_pattern_rooted(
@@ -3461,7 +3480,8 @@ static void ts_query_cursor__capture(
     if (step->capture_ids[j] == NONE) break;
     array_push(capture_list, ((TSQueryCapture) { node, capture_id }));
     LOG(
-      "  capture node. type:%s, pattern:%u, capture_id:%u, capture_count:%u\n",
+      "  capture node %u. type:%s, pattern:%u, capture_id:%u, capture_count:%u\n",
+      j,
       ts_node_type(node),
       state->pattern_index,
       capture_id,
@@ -3860,7 +3880,8 @@ static inline bool ts_query_cursor__advance(
           if (!node_does_match) {
             if (!later_sibling_can_match) {
               LOG(
-                "  discard state. pattern:%u, step:%u\n",
+                "  discard state %u. pattern:%u, step:%u\n",
+                j,
                 state->pattern_index,
                 state->step_index
               );
@@ -3885,7 +3906,8 @@ static inline bool ts_query_cursor__advance(
           )) {
             if (ts_query_cursor__copy_state(self, &state)) {
               LOG(
-                "  split state for capture. pattern:%u, step:%u\n",
+                "  split state for capture %u. pattern:%u, step:%u\n",
+                j,
                 state->pattern_index,
                 state->step_index
               );
@@ -3924,6 +3946,7 @@ static inline bool ts_query_cursor__advance(
           }
 
           // If the current node is captured in this pattern, add it to the capture list.
+          // printf("step->capture_ids[0]: %d\n", step->capture_ids[0]);
           if (step->capture_ids[0] != NONE) {
             ts_query_cursor__capture(self, state, step, node);
           }
@@ -3937,7 +3960,8 @@ static inline bool ts_query_cursor__advance(
           // Advance this state to the next step of its pattern.
           state->step_index++;
           LOG(
-            "  advance state. pattern:%u, step:%u\n",
+            "  advance state %u. pattern:%u, step:%u\n",
+            j,
             state->pattern_index,
             state->step_index
           );
@@ -3966,6 +3990,7 @@ static inline bool ts_query_cursor__advance(
           unsigned end_index = j + 1;
           for (unsigned k = j; k < end_index; k++) {
             QueryState *child_state = &self->states.contents[k];
+            unsigned idx = k;
             QueryStep *child_step = &self->query->steps.contents[child_state->step_index];
             if (child_step->alternative_index != NONE) {
               // A "dead-end" step exists only to add a non-sequential jump into the step sequence,
@@ -3988,7 +4013,8 @@ static inline bool ts_query_cursor__advance(
               QueryState *copy = ts_query_cursor__copy_state(self, &child_state);
               if (copy) {
                 LOG(
-                  "  split state for branch. pattern:%u, from_step:%u, to_step:%u, immediate:%d, capture_count: %u\n",
+                  "  split state for branch %u. pattern:%u, from_step:%u, to_step:%u, immediate:%d, capture_count: %u\n",
+                  idx,
                   copy->pattern_index,
                   copy->step_index,
                   next_step->alternative_index,
@@ -4041,7 +4067,8 @@ static inline bool ts_query_cursor__advance(
             if (left_contains_right) {
               if (state->step_index == other_state->step_index) {
                 LOG(
-                  "  drop shorter state. pattern: %u, step_index: %u\n",
+                  "  drop shorter state %u. pattern: %u, step_index: %u\n",
+                  k,
                   state->pattern_index,
                   state->step_index
                 );
@@ -4055,7 +4082,8 @@ static inline bool ts_query_cursor__advance(
             if (right_contains_left) {
               if (state->step_index == other_state->step_index) {
                 LOG(
-                  "  drop shorter state. pattern: %u, step_index: %u\n",
+                  "  drop shorter state %u. pattern: %u, step_index: %u\n",
+                  j,
                   state->pattern_index,
                   state->step_index
                 );
@@ -4073,7 +4101,8 @@ static inline bool ts_query_cursor__advance(
           // of in-progress states and add it to the list of finished states.
           if (!did_remove) {
             LOG(
-              "  keep state. pattern: %u, start_depth: %u, step_index: %u, capture_count: %u\n",
+              "  keep state %u. pattern: %u, start_depth: %u, step_index: %u, capture_count: %u\n",
+              j,
               state->pattern_index,
               state->start_depth,
               state->step_index,
@@ -4082,9 +4111,17 @@ static inline bool ts_query_cursor__advance(
             QueryStep *next_step = &self->query->steps.contents[state->step_index];
             if (next_step->depth == PATTERN_DONE_MARKER) {
               if (state->has_in_progress_alternatives) {
-                LOG("  defer finishing pattern %u\n", state->pattern_index);
+                LOG(
+                  "  defer finishing pattern %u %u\n",
+                  j,
+                  state->pattern_index
+                );
               } else {
-                LOG("  finish pattern %u\n", state->pattern_index);
+                LOG(
+                  "  finish pattern %u %u\n",
+                  j,
+                  state->pattern_index
+                );
                 array_push(&self->finished_states, *state);
                 array_erase(&self->states, (uint32_t)(state - self->states.contents));
                 did_match = true;
