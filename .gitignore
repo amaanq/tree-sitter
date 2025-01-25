@@ -16,6 +16,8 @@ node_modules
 
 docs/assets/js/tree-sitter.js
 
+/cli/assets
+
 /tree-sitter.pc
 
 /target

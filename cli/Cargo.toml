@@ -12,6 +12,8 @@ license.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+include = ["/assets", "/src", "/benches", "/Cargo.toml", "/build.rs"]
+
 [lints]
 workspace = true
 
