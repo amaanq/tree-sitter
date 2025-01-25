@@ -11,31 +11,21 @@ use tiny_http::{Header, Response, Server};
 
 use super::wasm;
 
-macro_rules! optional_resource {
+macro_rules! resource {
     ($name:tt, $path:tt) => {
-        #[cfg(TREE_SITTER_EMBED_WASM_BINDING)]
         fn $name(tree_sitter_dir: Option<&Path>) -> Cow<'static, [u8]> {
             if let Some(tree_sitter_dir) = tree_sitter_dir {
                 Cow::Owned(fs::read(tree_sitter_dir.join($path)).unwrap())
             } else {
-                Cow::Borrowed(include_bytes!(concat!("../../", $path)))
-            }
-        }
-
-        #[cfg(not(TREE_SITTER_EMBED_WASM_BINDING))]
-        fn $name(tree_sitter_dir: Option<&Path>) -> Cow<'static, [u8]> {
-            if let Some(tree_sitter_dir) = tree_sitter_dir {
-                Cow::Owned(fs::read(tree_sitter_dir.join($path)).unwrap())
-            } else {
-                Cow::Borrowed(&[])
+                Cow::Borrowed(include_bytes!($path))
             }
         }
     };
 }
 
-optional_resource!(get_playground_js, "docs/src/assets/js/playground.js");
-optional_resource!(get_lib_js, "lib/binding_web/tree-sitter.js");
-optional_resource!(get_lib_wasm, "lib/binding_web/tree-sitter.wasm");
+resource!(get_playground_js, "../assets/playground.js");
+resource!(get_lib_js, "../assets/tree-sitter.js");
+resource!(get_lib_wasm, "../assets/tree-sitter.wasm");
 
 fn get_main_html(tree_sitter_dir: Option<&Path>) -> Cow<'static, [u8]> {
     tree_sitter_dir.map_or(
@@ -72,27 +62,9 @@ pub fn serve(grammar_path: &Path, open_in_browser: bool) -> Result<()> {
         let res = match request.url() {
             "/" => response(&main_html, &html_header),
             "/tree-sitter-parser.wasm" => response(&language_wasm, &wasm_header),
-            "/playground.js" => {
-                if playground_js.is_empty() {
-                    redirect("https://tree-sitter.github.io/tree-sitter/assets/js/playground.js")
-                } else {
-                    response(&playground_js, &js_header)
-                }
-            }
-            "/tree-sitter.js" => {
-                if lib_js.is_empty() {
-                    redirect("https://tree-sitter.github.io/tree-sitter.js")
-                } else {
-                    response(&lib_js, &js_header)
-                }
-            }
-            "/tree-sitter.wasm" => {
-                if lib_wasm.is_empty() {
-                    redirect("https://tree-sitter.github.io/tree-sitter.wasm")
-                } else {
-                    response(&lib_wasm, &wasm_header)
-                }
-            }
+            "/playground.js" => response(&playground_js, &js_header),
+            "/tree-sitter.js" => response(&lib_js, &js_header),
+            "/tree-sitter.wasm" => response(&lib_wasm, &wasm_header),
             _ => response(b"Not found", &html_header).with_status_code(404),
         };
         request
@@ -101,12 +73,6 @@ pub fn serve(grammar_path: &Path, open_in_browser: bool) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn redirect(url: &str) -> Response<&[u8]> {
-    Response::empty(302)
-        .with_data("".as_bytes(), Some(0))
-        .with_header(Header::from_bytes("Location", url.as_bytes()).unwrap())
 }
 
 fn response<'a>(data: &'a [u8], header: &Header) -> Response<&'a [u8]> {

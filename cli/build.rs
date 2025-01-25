@@ -1,21 +1,13 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-    process::Command,
-    time::SystemTime,
-};
+use std::{env, fs, path::PathBuf, process::Command, time::SystemTime};
 
 fn main() {
     if let Some(git_sha) = read_git_sha() {
         println!("cargo:rustc-env=BUILD_SHA={git_sha}");
     }
 
-    println!("cargo:rustc-check-cfg=cfg(sanitizing)");
-    println!("cargo:rustc-check-cfg=cfg(TREE_SITTER_EMBED_WASM_BINDING)");
+    copy_playground_files();
 
-    if web_playground_files_present() {
-        println!("cargo:rustc-cfg=TREE_SITTER_EMBED_WASM_BINDING");
-    }
+    println!("cargo:rustc-check-cfg=cfg(sanitizing)");
 
     let build_time = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -50,14 +42,38 @@ fn main() {
     }
 }
 
-fn web_playground_files_present() -> bool {
-    let paths = [
-        "../docs/src/assets/js/playground.js",
-        "../lib/binding_web/tree-sitter.js",
-        "../lib/binding_web/tree-sitter.wasm",
+fn copy_playground_files() {
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let assets_dir = manifest_dir.join("assets");
+    fs::create_dir_all(&assets_dir).unwrap();
+
+    let files = [
+        ("../docs/src/assets/js/playground.js", "playground.js"),
+        ("../lib/binding_web/tree-sitter.js", "tree-sitter.js"),
+        ("../lib/binding_web/tree-sitter.wasm", "tree-sitter.wasm"),
     ];
 
-    paths.iter().all(|p| Path::new(p).exists())
+    // Copy files if they exist
+    for (src, dest) in files {
+        let src_path = manifest_dir.join(src);
+        let dest_path = assets_dir.join(dest);
+
+        if src_path.exists() {
+            println!("cargo:rerun-if-changed={}", src_path.display());
+            fs::copy(&src_path, &dest_path).unwrap_or_else(|e| {
+                panic!(
+                    "Failed to copy {} to {}: {e}",
+                    src_path.display(),
+                    dest_path.display(),
+                );
+            });
+        } else {
+            // During package publication, files should already be in assets/
+            if !dest_path.exists() {
+                println!("cargo:warning=Playground file not found: {src}. Package may not work correctly.");
+            }
+        }
+    }
 }
 
 // When updating this function, don't forget to also update generate/build.rs which has a
