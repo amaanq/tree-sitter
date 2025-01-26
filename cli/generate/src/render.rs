@@ -1,6 +1,6 @@
 use std::{
     cmp,
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{hash_map::Entry, BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::Write,
     mem::swap,
 };
@@ -76,7 +76,8 @@ struct Generator {
     lexical_grammar: LexicalGrammar,
     default_aliases: AliasMap,
     symbol_order: HashMap<Symbol, usize>,
-    symbol_ids: HashMap<Symbol, String>,
+    symbol_names: HashMap<Symbol, String>,
+    symbol_ids: HashMap<String, SymbolId>,
     alias_ids: HashMap<Alias, String>,
     unique_aliases: Vec<Alias>,
     symbol_map: HashMap<Symbol, Symbol>,
@@ -100,8 +101,55 @@ struct Metadata {
     patch_version: u8,
 }
 
+pub struct GenerateOutput {
+    pub c_code: String,
+    pub symbol_ids: HashMap<String, SymbolId>,
+}
+
+#[derive(Debug)]
+pub enum SymbolId {
+    Single(u16),
+    Multi(Vec<u16>),
+}
+
+impl SymbolId {
+    pub fn value(&self) -> Box<dyn Iterator<Item = u16> + '_> {
+        match self {
+            Self::Single(id) => Box::new(std::iter::once(*id)),
+            Self::Multi(ids) => Box::new(ids.iter().copied()),
+        }
+    }
+
+    pub fn next(&self) -> u16 {
+        match self {
+            Self::Single(id) => *id,
+            Self::Multi(ids) => {
+                if ids.len() > 1 {
+                    println!("Warning: multiple symbol ids for the same name: {:?}", ids);
+                }
+                ids[0]
+            }
+        }
+    }
+
+    pub fn insert(&mut self, id: u16) {
+        match self {
+            Self::Single(existing_id) => {
+                if *existing_id != id {
+                    *self = Self::Multi(vec![*existing_id, id]);
+                }
+            }
+            Self::Multi(ids) => {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        }
+    }
+}
+
 impl Generator {
-    fn generate(mut self) -> String {
+    fn generate(mut self) -> GenerateOutput {
         self.init();
         self.add_header();
         self.add_includes();
@@ -168,17 +216,39 @@ impl Generator {
 
         self.add_parser_export();
 
-        self.buffer
+        GenerateOutput {
+            c_code: self.buffer,
+            symbol_ids: self.symbol_ids,
+        }
     }
 
     fn init(&mut self) {
         let mut symbol_identifiers = HashSet::new();
-        for i in 0..self.parse_table.symbols.len() {
-            self.assign_symbol_id(self.parse_table.symbols[i], &mut symbol_identifiers);
+        let mut i = 1;
+        for idx in 0..self.parse_table.symbols.len() {
+            let symbol = self.parse_table.symbols[idx];
+            let name = self.metadata_for_symbol(symbol).0.to_string();
+
+            self.assign_symbol_id(symbol, &mut symbol_identifiers);
+
+            if symbol != Symbol::end() {
+                self.symbol_ids.insert(name, SymbolId::Single(i));
+                if let Some(alias) = self.default_aliases.get(&symbol) {
+                    match self.symbol_ids.entry(alias.value.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().insert(i);
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(SymbolId::Single(i));
+                        }
+                    }
+                }
+                i += 1;
+            }
         }
-        self.symbol_ids.insert(
+        self.symbol_names.insert(
             Symbol::end_of_nonterminal_extra(),
-            self.symbol_ids[&Symbol::end()].clone(),
+            self.symbol_names[&Symbol::end()].clone(),
         );
 
         self.symbol_map = HashMap::new();
@@ -227,6 +297,7 @@ impl Generator {
             self.symbol_map.insert(*symbol, *mapping);
         }
 
+        let mut alias_map = HashMap::new();
         for production_info in &self.parse_table.production_infos {
             // Build a list of all field names
             for field_name in production_info.field_map.keys() {
@@ -241,7 +312,7 @@ impl Generator {
                     // Some aliases match an existing symbol in the grammar.
                     let alias_id =
                         if let Some(existing_symbol) = self.symbols_for_alias(alias).first() {
-                            self.symbol_ids[&self.symbol_map[existing_symbol]].clone()
+                            self.symbol_names[&self.symbol_map[existing_symbol]].clone()
                         }
                         // Other aliases don't match any existing symbol, and need their own
                         // identifiers.
@@ -250,16 +321,26 @@ impl Generator {
                                 self.unique_aliases.insert(i, alias.clone());
                             }
 
+                            let sanitized_name = sanitize_identifier(&alias.value);
+                            alias_map.insert(alias.clone(), sanitized_name.clone());
                             if alias.is_named {
-                                format!("alias_sym_{}", self.sanitize_identifier(&alias.value))
+                                format!("alias_sym_{sanitized_name}")
                             } else {
-                                format!("anon_alias_sym_{}", self.sanitize_identifier(&alias.value))
+                                format!("anon_alias_sym_{sanitized_name}")
                             }
                         };
 
                     self.alias_ids.entry(alias.clone()).or_insert(alias_id);
                 }
             }
+        }
+
+        for alias in &self.unique_aliases {
+            let name = alias_map
+                .get(alias)
+                .unwrap_or_else(|| panic!("Unexpected missing alias: {alias:?}"));
+            self.symbol_ids.insert(name.clone(), SymbolId::Single(i));
+            i += 1;
         }
 
         for (ix, (symbol, _)) in self.large_character_sets.iter().enumerate() {
@@ -269,7 +350,7 @@ impl Generator {
                 .count()
                 + 1;
             let constant_name = if let Some(symbol) = symbol {
-                format!("{}_character_set_{}", self.symbol_ids[symbol], count)
+                format!("{}_character_set_{}", self.symbol_names[symbol], count)
             } else {
                 format!("extras_character_set_{count}")
             };
@@ -297,7 +378,7 @@ impl Generator {
 
         if self.abi_version >= ABI_VERSION_WITH_RESERVED_WORDS {
             for (supertype, subtypes) in &self.supertype_symbol_map {
-                if let Some(supertype) = self.symbol_ids.get(supertype) {
+                if let Some(supertype) = self.symbol_names.get(supertype) {
                     self.supertype_map
                         .entry(supertype.clone())
                         .or_insert_with(|| subtypes.clone());
@@ -433,7 +514,7 @@ impl Generator {
         for symbol in &self.parse_table.symbols {
             if *symbol != Symbol::end() {
                 self.symbol_order.insert(*symbol, i);
-                add_line!(self, "{} = {i},", self.symbol_ids[symbol]);
+                add_line!(self, "{} = {i},", self.symbol_names[symbol]);
                 i += 1;
             }
         }
@@ -457,7 +538,7 @@ impl Generator {
                         alias.value.as_str()
                     }),
             );
-            add_line!(self, "[{}] = \"{name}\",", self.symbol_ids[symbol]);
+            add_line!(self, "[{}] = \"{name}\",", self.symbol_names[symbol]);
         }
         for alias in &self.unique_aliases {
             add_line!(
@@ -479,8 +560,8 @@ impl Generator {
             add_line!(
                 self,
                 "[{}] = {},",
-                self.symbol_ids[symbol],
-                self.symbol_ids[&self.symbol_map[symbol]],
+                self.symbol_names[symbol],
+                self.symbol_names[&self.symbol_map[symbol]],
             );
         }
 
@@ -528,7 +609,7 @@ impl Generator {
         );
         indent!(self);
         for symbol in &self.parse_table.symbols {
-            add_line!(self, "[{}] = {{", self.symbol_ids[symbol]);
+            add_line!(self, "[{}] = {{", self.symbol_names[symbol]);
             indent!(self);
             if let Some(Alias { is_named, .. }) = self.default_aliases.get(symbol) {
                 add_line!(self, ".visible = true,");
@@ -611,7 +692,7 @@ impl Generator {
                     if let Some(alias) = &step.alias {
                         if step.symbol.is_non_terminal()
                             && Some(alias) != self.default_aliases.get(&step.symbol)
-                            && self.symbol_ids.contains_key(&step.symbol)
+                            && self.symbol_names.contains_key(&step.symbol)
                         {
                             if let Some(alias_id) = self.alias_ids.get(alias) {
                                 let alias_ids =
@@ -635,8 +716,8 @@ impl Generator {
         );
         indent!(self);
         for (symbol, alias_ids) in alias_ids_by_symbol {
-            let symbol_id = &self.symbol_ids[symbol];
-            let public_symbol_id = &self.symbol_ids[&self.symbol_map[symbol]];
+            let symbol_id = &self.symbol_names[symbol];
+            let public_symbol_id = &self.symbol_names[&self.symbol_map[symbol]];
             add_line!(self, "{symbol_id}, {},", 1 + alias_ids.len());
             indent!(self);
             add_line!(self, "{public_symbol_id},");
@@ -772,13 +853,13 @@ impl Generator {
                 subtypes
                     .iter()
                     .flat_map(|s| match s {
-                        ChildType::Normal(symbol) => vec![self.symbol_ids.get(symbol).cloned()],
+                        ChildType::Normal(symbol) => vec![self.symbol_names.get(symbol).cloned()],
                         ChildType::Aliased(alias) => {
                             self.alias_ids.get(alias).cloned().map_or_else(
                                 || {
                                     self.symbols_for_alias(alias)
                                         .into_iter()
-                                        .map(|s| self.symbol_ids.get(&s).cloned())
+                                        .map(|s| self.symbol_names.get(&s).cloned())
                                         .collect()
                                 },
                                 |a| vec![Some(a)],
@@ -857,7 +938,7 @@ impl Generator {
 
     fn add_lex_state(&mut self, _state_ix: usize, state: LexState) {
         if let Some(accept_action) = state.accept_action {
-            add_line!(self, "ACCEPT_TOKEN({});", self.symbol_ids[&accept_action]);
+            add_line!(self, "ACCEPT_TOKEN({});", self.symbol_names[&accept_action]);
         }
 
         if let Some(eof_action) = state.eof_action {
@@ -1200,7 +1281,7 @@ impl Generator {
             add_line!(self, "[{id}] = {{");
             indent!(self);
             for token in set.iter() {
-                add_line!(self, "{},", self.symbol_ids[&token]);
+                add_line!(self, "{},", self.symbol_names[&token]);
             }
             dedent!(self);
             add_line!(self, "}},");
@@ -1240,7 +1321,7 @@ impl Generator {
                 self,
                 "[{}] = {},",
                 self.external_token_id(token),
-                self.symbol_ids[&id_token],
+                self.symbol_names[&id_token],
             );
         }
         dedent!(self);
@@ -1321,7 +1402,7 @@ impl Generator {
                 add_line!(
                     self,
                     "[{}] = STATE({}),",
-                    self.symbol_ids[symbol],
+                    self.symbol_names[symbol],
                     match action {
                         GotoAction::Goto(state) => *state,
                         GotoAction::ShiftExtra => i,
@@ -1335,7 +1416,11 @@ impl Generator {
                     &mut parse_table_entries,
                     &mut next_parse_action_list_index,
                 );
-                add_line!(self, "[{}] = ACTIONS({entry_id}),", self.symbol_ids[symbol]);
+                add_line!(
+                    self,
+                    "[{}] = ACTIONS({entry_id}),",
+                    self.symbol_names[symbol]
+                );
             }
 
             dedent!(self);
@@ -1412,7 +1497,7 @@ impl Generator {
                     symbols.sort_unstable();
                     indent!(self);
                     for symbol in symbols {
-                        add_line!(self, "{},", self.symbol_ids[symbol]);
+                        add_line!(self, "{},", self.symbol_names[symbol]);
                     }
                     dedent!(self);
                 }
@@ -1488,7 +1573,7 @@ impl Generator {
                         add!(
                             self,
                             "REDUCE({}, {child_count}, {dynamic_precedence}, {production_id})",
-                            self.symbol_ids[&symbol]
+                            self.symbol_names[&symbol]
                         );
                     }
                 }
@@ -1600,7 +1685,7 @@ impl Generator {
             add_line!(
                 self,
                 ".keyword_capture_token = {},",
-                self.symbol_ids[&keyword_capture_token]
+                self.symbol_names[&keyword_capture_token]
             );
         }
 
@@ -1699,38 +1784,36 @@ impl Generator {
     }
 
     fn external_token_id(&self, token: &ExternalToken) -> String {
-        format!(
-            "ts_external_token_{}",
-            self.sanitize_identifier(&token.name)
-        )
+        format!("ts_external_token_{}", sanitize_identifier(&token.name))
     }
 
     fn assign_symbol_id(&mut self, symbol: Symbol, used_identifiers: &mut HashSet<String>) {
-        let mut id;
+        let mut symbol_name;
         if symbol == Symbol::end() {
-            id = "ts_builtin_sym_end".to_string();
+            symbol_name = "ts_builtin_sym_end".to_string();
         } else {
             let (name, kind) = self.metadata_for_symbol(symbol);
-            id = match kind {
-                VariableType::Auxiliary => format!("aux_sym_{}", self.sanitize_identifier(name)),
-                VariableType::Anonymous => format!("anon_sym_{}", self.sanitize_identifier(name)),
+            let sanitized_name = sanitize_identifier(name);
+            symbol_name = match kind {
+                VariableType::Auxiliary => format!("aux_sym_{sanitized_name}"),
+                VariableType::Anonymous => format!("anon_sym_{sanitized_name}"),
                 VariableType::Hidden | VariableType::Named => {
-                    format!("sym_{}", self.sanitize_identifier(name))
+                    format!("sym_{sanitized_name}")
                 }
             };
 
             let mut suffix_number = 1;
             let mut suffix = String::new();
-            while used_identifiers.contains(&id) {
-                id.drain(id.len() - suffix.len()..);
+            while used_identifiers.contains(&symbol_name) {
+                symbol_name.drain(symbol_name.len() - suffix.len()..);
                 suffix_number += 1;
                 suffix = suffix_number.to_string();
-                id += &suffix;
+                symbol_name += &suffix;
             }
         }
 
-        used_identifiers.insert(id.clone());
-        self.symbol_ids.insert(symbol, id);
+        used_identifiers.insert(symbol_name.clone());
+        self.symbol_names.insert(symbol, symbol_name);
     }
 
     fn field_id(&self, field_name: &str) -> String {
@@ -1770,101 +1853,6 @@ impl Generator {
                 )
             })
             .collect()
-    }
-
-    fn sanitize_identifier(&self, name: &str) -> String {
-        let mut result = String::with_capacity(name.len());
-        for c in name.chars() {
-            if c.is_ascii_alphanumeric() || c == '_' {
-                result.push(c);
-            } else {
-                'special_chars: {
-                    let replacement = match c {
-                        ' ' if name.len() == 1 => "SPACE",
-                        '~' => "TILDE",
-                        '`' => "BQUOTE",
-                        '!' => "BANG",
-                        '@' => "AT",
-                        '#' => "POUND",
-                        '$' => "DOLLAR",
-                        '%' => "PERCENT",
-                        '^' => "CARET",
-                        '&' => "AMP",
-                        '*' => "STAR",
-                        '(' => "LPAREN",
-                        ')' => "RPAREN",
-                        '-' => "DASH",
-                        '+' => "PLUS",
-                        '=' => "EQ",
-                        '{' => "LBRACE",
-                        '}' => "RBRACE",
-                        '[' => "LBRACK",
-                        ']' => "RBRACK",
-                        '\\' => "BSLASH",
-                        '|' => "PIPE",
-                        ':' => "COLON",
-                        ';' => "SEMI",
-                        '"' => "DQUOTE",
-                        '\'' => "SQUOTE",
-                        '<' => "LT",
-                        '>' => "GT",
-                        ',' => "COMMA",
-                        '.' => "DOT",
-                        '?' => "QMARK",
-                        '/' => "SLASH",
-                        '\n' => "LF",
-                        '\r' => "CR",
-                        '\t' => "TAB",
-                        '\0' => "NULL",
-                        '\u{0001}' => "SOH",
-                        '\u{0002}' => "STX",
-                        '\u{0003}' => "ETX",
-                        '\u{0004}' => "EOT",
-                        '\u{0005}' => "ENQ",
-                        '\u{0006}' => "ACK",
-                        '\u{0007}' => "BEL",
-                        '\u{0008}' => "BS",
-                        '\u{000b}' => "VTAB",
-                        '\u{000c}' => "FF",
-                        '\u{000e}' => "SO",
-                        '\u{000f}' => "SI",
-                        '\u{0010}' => "DLE",
-                        '\u{0011}' => "DC1",
-                        '\u{0012}' => "DC2",
-                        '\u{0013}' => "DC3",
-                        '\u{0014}' => "DC4",
-                        '\u{0015}' => "NAK",
-                        '\u{0016}' => "SYN",
-                        '\u{0017}' => "ETB",
-                        '\u{0018}' => "CAN",
-                        '\u{0019}' => "EM",
-                        '\u{001a}' => "SUB",
-                        '\u{001b}' => "ESC",
-                        '\u{001c}' => "FS",
-                        '\u{001d}' => "GS",
-                        '\u{001e}' => "RS",
-                        '\u{001f}' => "US",
-                        '\u{007F}' => "DEL",
-                        '\u{FEFF}' => "BOM",
-                        '\u{0080}'..='\u{FFFF}' => {
-                            result.push_str(&format!("u{:04x}", c as u32));
-                            break 'special_chars;
-                        }
-                        '\u{10000}'..='\u{10FFFF}' => {
-                            result.push_str(&format!("U{:08x}", c as u32));
-                            break 'special_chars;
-                        }
-                        '0'..='9' | 'a'..='z' | 'A'..='Z' | '_' => unreachable!(),
-                        ' ' => break 'special_chars,
-                    };
-                    if !result.is_empty() && !result.ends_with('_') {
-                        result.push('_');
-                    }
-                    result += replacement;
-                }
-            }
-        }
-        result
     }
 
     fn sanitize_string(&self, name: &str) -> String {
@@ -1914,6 +1902,101 @@ impl Generator {
     }
 }
 
+pub fn sanitize_identifier(name: &str) -> String {
+    let mut result = String::with_capacity(name.len());
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            result.push(c);
+        } else {
+            'special_chars: {
+                let replacement = match c {
+                    ' ' if name.len() == 1 => "SPACE",
+                    '~' => "TILDE",
+                    '`' => "BQUOTE",
+                    '!' => "BANG",
+                    '@' => "AT",
+                    '#' => "POUND",
+                    '$' => "DOLLAR",
+                    '%' => "PERCENT",
+                    '^' => "CARET",
+                    '&' => "AMP",
+                    '*' => "STAR",
+                    '(' => "LPAREN",
+                    ')' => "RPAREN",
+                    '-' => "DASH",
+                    '+' => "PLUS",
+                    '=' => "EQ",
+                    '{' => "LBRACE",
+                    '}' => "RBRACE",
+                    '[' => "LBRACK",
+                    ']' => "RBRACK",
+                    '\\' => "BSLASH",
+                    '|' => "PIPE",
+                    ':' => "COLON",
+                    ';' => "SEMI",
+                    '"' => "DQUOTE",
+                    '\'' => "SQUOTE",
+                    '<' => "LT",
+                    '>' => "GT",
+                    ',' => "COMMA",
+                    '.' => "DOT",
+                    '?' => "QMARK",
+                    '/' => "SLASH",
+                    '\n' => "LF",
+                    '\r' => "CR",
+                    '\t' => "TAB",
+                    '\0' => "NULL",
+                    '\u{0001}' => "SOH",
+                    '\u{0002}' => "STX",
+                    '\u{0003}' => "ETX",
+                    '\u{0004}' => "EOT",
+                    '\u{0005}' => "ENQ",
+                    '\u{0006}' => "ACK",
+                    '\u{0007}' => "BEL",
+                    '\u{0008}' => "BS",
+                    '\u{000b}' => "VTAB",
+                    '\u{000c}' => "FF",
+                    '\u{000e}' => "SO",
+                    '\u{000f}' => "SI",
+                    '\u{0010}' => "DLE",
+                    '\u{0011}' => "DC1",
+                    '\u{0012}' => "DC2",
+                    '\u{0013}' => "DC3",
+                    '\u{0014}' => "DC4",
+                    '\u{0015}' => "NAK",
+                    '\u{0016}' => "SYN",
+                    '\u{0017}' => "ETB",
+                    '\u{0018}' => "CAN",
+                    '\u{0019}' => "EM",
+                    '\u{001a}' => "SUB",
+                    '\u{001b}' => "ESC",
+                    '\u{001c}' => "FS",
+                    '\u{001d}' => "GS",
+                    '\u{001e}' => "RS",
+                    '\u{001f}' => "US",
+                    '\u{007F}' => "DEL",
+                    '\u{FEFF}' => "BOM",
+                    '\u{0080}'..='\u{FFFF}' => {
+                        result.push_str(&format!("u{:04x}", c as u32));
+                        break 'special_chars;
+                    }
+                    '\u{10000}'..='\u{10FFFF}' => {
+                        result.push_str(&format!("U{:08x}", c as u32));
+                        break 'special_chars;
+                    }
+                    '0'..='9' | 'a'..='z' | 'A'..='Z' | '_' => unreachable!(),
+                    ' ' => break 'special_chars,
+                };
+                if !result.is_empty() && !result.ends_with('_') {
+                    result.push('_');
+                }
+                result += replacement;
+            }
+        }
+    }
+    result
+}
+
 /// Returns a String of C code for the given components of a parser.
 ///
 /// # Arguments
@@ -1941,7 +2024,7 @@ pub fn render_c_code(
     abi_version: usize,
     semantic_version: Option<(u8, u8, u8)>,
     supertype_symbol_map: BTreeMap<Symbol, Vec<ChildType>>,
-) -> String {
+) -> GenerateOutput {
     assert!(
         (ABI_VERSION_MIN..=ABI_VERSION_MAX).contains(&abi_version),
         "This version of Tree-sitter can only generate parsers with ABI version {ABI_VERSION_MIN} - {ABI_VERSION_MAX}, not {abi_version}",

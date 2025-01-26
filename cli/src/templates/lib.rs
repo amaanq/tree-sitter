@@ -20,6 +20,10 @@
 
 use tree_sitter_language::LanguageFn;
 
+mod node_types;
+
+pub use node_types::*;
+
 extern "C" {
     fn tree_sitter_PARSER_NAME() -> *const ();
 }

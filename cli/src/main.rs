@@ -771,6 +771,7 @@ impl Generate {
             abi_version,
             self.report_states_for_rule.as_deref(),
             self.js_runtime.as_deref(),
+            true,
         ) {
             if self.json {
                 eprintln!("{}", serde_json::to_string_pretty(&err)?);

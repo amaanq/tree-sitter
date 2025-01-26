@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::Result;
+use node_types::{generate_rust_bindings, NodeInfoJSON};
 use regex::{Regex, RegexBuilder};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -32,7 +33,7 @@ use parse_grammar::parse_grammar;
 pub use parse_grammar::ParseGrammarError;
 use prepare_grammar::prepare_grammar;
 pub use prepare_grammar::PrepareGrammarError;
-use render::render_c_code;
+use render::{render_c_code, GenerateOutput};
 
 static JSON_COMMENT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     RegexBuilder::new("^\\s*//.*")
@@ -43,8 +44,12 @@ static JSON_COMMENT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 
 struct GeneratedParser {
     c_code: String,
-    node_types_json: String,
+    node_types_json: Vec<NodeInfoJSON>,
 }
+
+// struct BindingsCode {
+//     rust: Option<String>,
+// }
 
 pub const ALLOC_HEADER: &str = include_str!("templates/alloc.h");
 pub const ARRAY_HEADER: &str = include_str!("templates/array.h");
@@ -143,6 +148,43 @@ impl From<semver::Error> for JSError {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct TreeSitterJSON {
+    pub bindings: Bindings,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+pub struct Bindings {
+    pub c: bool,
+    pub go: bool,
+    #[serde(skip)]
+    pub java: bool,
+    #[serde(skip)]
+    pub kotlin: bool,
+    pub node: bool,
+    pub python: bool,
+    pub rust: bool,
+    pub swift: bool,
+    pub zig: bool,
+}
+
+impl Default for Bindings {
+    fn default() -> Self {
+        Self {
+            c: true,
+            go: true,
+            java: false,
+            kotlin: false,
+            node: true,
+            python: true,
+            rust: true,
+            swift: true,
+            zig: false,
+        }
+    }
+}
+
 pub fn generate_parser_in_directory(
     repo_path: &Path,
     out_path: Option<&str>,
@@ -150,6 +192,7 @@ pub fn generate_parser_in_directory(
     abi_version: usize,
     report_symbol_name: Option<&str>,
     js_runtime: Option<&str>,
+    bindings: bool,
 ) -> GenerateResult<()> {
     let mut repo_path = repo_path.to_owned();
     let mut grammar_path = grammar_path;
@@ -192,10 +235,19 @@ pub fn generate_parser_in_directory(
 
     let semantic_version = read_grammar_version(&repo_path)?;
 
+    let bindings = bindings
+        .then(|| {
+            let tree_sitter_json = fs::read_to_string(repo_path.join("tree-sitter.json")).ok()?;
+            serde_json::from_str::<TreeSitterJSON>(&tree_sitter_json)
+                .ok()
+                .map(|json| json.bindings)
+        })
+        .flatten();
+
     // Generate the parser and related files.
     let GeneratedParser {
         c_code,
-        node_types_json,
+        mut node_types_json,
     } = generate_parser_for_grammar_with_opts(
         &input_grammar,
         abi_version,
@@ -204,10 +256,55 @@ pub fn generate_parser_in_directory(
     )?;
 
     write_file(&src_path.join("parser.c"), c_code)?;
-    write_file(&src_path.join("node-types.json"), node_types_json)?;
+    write_file(
+        &src_path.join("node-types.json"),
+        serde_json::to_string_pretty(&node_types_json).unwrap(),
+    )?;
     write_file(&header_path.join("alloc.h"), ALLOC_HEADER)?;
     write_file(&header_path.join("array.h"), ARRAY_HEADER)?;
     write_file(&header_path.join("parser.h"), tree_sitter::PARSER_HEADER)?;
+
+    if let Some(bindings) = bindings {
+        let bindings_path = repo_path.join("bindings");
+
+        node_types_json.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
+
+        if bindings.rust {
+            write_file(
+                &bindings_path.join("rust").join("node_types.rs"),
+                generate_rust_bindings(&node_types_json),
+            )?;
+        }
+
+        // if bindings.node {
+        //     let node_bindings = generate_node_bindings(&node_types_json);
+        //     write_file(&bindings_path.join("node-types.json"), node_bindings)?;
+        // }
+        //
+        // if bindings.python {
+        //     let python_bindings = generate_python_bindings(&node_types_json);
+        //     write_file(
+        //         &bindings_path.join("python").join("node-types.json"),
+        //         python_bindings,
+        //     )?;
+        // }
+        //
+        // if bindings.go {
+        //     let go_bindings = generate_go_bindings(&node_types_json);
+        //     write_file(
+        //         &bindings_path.join("go").join("node-types.json"),
+        //         go_bindings,
+        //     )?;
+        // }
+        //
+        // if bindings.zig {
+        //     let swift_bindings = generate_zig_bindings(&node_types_json);
+        //     write_file(
+        //         &bindings_path.join("swift").join("node-types.json"),
+        //         swift_bindings,
+        //     )?;
+        // }
+    }
 
     Ok(())
 }
@@ -237,14 +334,18 @@ fn generate_parser_for_grammar_with_opts(
         prepare_grammar(input_grammar)?;
     let variable_info =
         node_types::get_variable_info(&syntax_grammar, &lexical_grammar, &simple_aliases)?;
-    let node_types_json = node_types::generate_node_types_json(
+    let mut node_types_json = node_types::generate_node_types_json(
         &syntax_grammar,
         &lexical_grammar,
         &simple_aliases,
         &variable_info,
     );
-    let supertype_symbol_map =
-        node_types::get_supertype_symbol_map(&syntax_grammar, &simple_aliases, &variable_info);
+    let supertype_symbol_map = node_types::get_supertype_symbol_map(
+        &lexical_grammar,
+        &syntax_grammar,
+        &simple_aliases,
+        &variable_info,
+    );
     let tables = build_tables(
         &syntax_grammar,
         &lexical_grammar,
@@ -253,7 +354,8 @@ fn generate_parser_for_grammar_with_opts(
         &inlines,
         report_symbol_name,
     )?;
-    let c_code = render_c_code(
+
+    let GenerateOutput { c_code, symbol_ids } = render_c_code(
         &input_grammar.name,
         tables,
         syntax_grammar,
@@ -263,9 +365,12 @@ fn generate_parser_for_grammar_with_opts(
         semantic_version,
         supertype_symbol_map,
     );
+
+    node_types::augment_node_types_json(&mut node_types_json, &symbol_ids);
+
     Ok(GeneratedParser {
         c_code,
-        node_types_json: serde_json::to_string_pretty(&node_types_json).unwrap(),
+        node_types_json,
     })
 }
 
