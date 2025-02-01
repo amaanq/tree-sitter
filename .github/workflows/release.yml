@@ -94,6 +94,7 @@ jobs:
         uses: katyo/publish-crates@v2
         with:
           registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          dry-run: true
 
   npm:
     name: Publish packages to npmjs.com
@@ -128,6 +129,6 @@ jobs:
 
       - name: Publish to npmjs.com
         working-directory: ${{ matrix.directory }}
-        run: npm publish
+        run: npm publish --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
