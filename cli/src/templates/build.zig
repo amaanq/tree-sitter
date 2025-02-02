@@ -51,21 +51,12 @@ pub fn build(b: *std.Build) !void {
     });
     module.linkLibrary(lib);
 
-    const ts_dep = b.dependency("tree-sitter", .{});
-    const ts_mod = ts_dep.module("tree-sitter");
-    module.addImport("tree-sitter", ts_mod);
-
-    // ╭─────────────────╮
-    // │      Tests      │
-    // ╰─────────────────╯
-
     const tests = b.addTest(.{
         .root_source_file = b.path("bindings/zig/root.zig"),
         .target = target,
         .optimize = optimize,
     });
     tests.linkLibrary(lib);
-    tests.root_module.addImport("tree-sitter", ts_mod);
 
     const run_tests = b.addRunArtifact(tests);
 
