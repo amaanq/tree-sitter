@@ -615,6 +615,98 @@ fn test_query_verifies_possible_patterns_with_aliased_parent_nodes() {
 }
 
 #[test]
+fn test_quantifier_should_not_implicitly_anchor() {
+    allocations::record(|| {
+        let language = get_language("javascript");
+
+        let source = "{ /* c1 */ foo(); /* c2 */ bar(); }";
+        let query_no_quant = "(statement_block (comment) @c . (expression_statement) @e)";
+        let query_with_quant = "(statement_block (comment)* @c . (expression_statement) @e)";
+
+        let mut parser = Parser::new();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+
+        let q1 = Query::new(&language, query_no_quant).unwrap();
+        let q2 = Query::new(&language, query_with_quant).unwrap();
+
+        let mut cursor = QueryCursor::new();
+        let matches1 = collect_matches(
+            cursor.matches(&q1, tree.root_node(), source.as_bytes()),
+            &q1,
+            source,
+        );
+
+        let mut cursor2 = QueryCursor::new();
+        let matches2 = collect_matches(
+            cursor2.matches(&q2, tree.root_node(), source.as_bytes()),
+            &q2,
+            source,
+        );
+
+        println!("Matches without quantifier: {:?}", matches1);
+        println!("Matches with quantifier: {:?}", matches2);
+
+        // Both should match - quantifier shouldn't change anchoring behavior
+        assert_eq!(
+            matches1.len(),
+            matches2.len(),
+            "Quantifier should not implicitly anchor: {} vs {}",
+            matches1.len(),
+            matches2.len()
+        );
+
+        // let code = r#"
+        //     public class Foo
+        //     {
+        //         //foo
+        //         public static void Roo()
+        //         {
+        //             Console.WriteLine("Hello, World!");
+        //             var bar = "Hello, World!";
+        //             Console.WriteLine(bar);
+        //         }
+        //
+        //         //foo
+        //         public static void Woo()
+        //         {
+        //             Console.WriteLine("Hello, World!");
+        //             var bar = "Hello, World!";
+        //             Console.WriteLine(bar);
+        //         }
+        //     }
+        // "#;
+        //
+        // let language = get_language("c-sharp");
+        //
+        // let query = "
+        //     (class_declaration
+        //         (declaration_list
+        //         (comment)* @output.comment
+        //         .
+        //         [
+        //             (method_declaration)
+        //             (constructor_declaration)
+        //         ] @output.method)
+        //     )
+        // ";
+        //
+        // let query = Query::new(&language, query).unwrap();
+        //
+        // let mut parser = Parser::new();
+        // parser.set_language(&language).unwrap();
+        // let tree = parser.parse(code, None).unwrap();
+        // let mut cursor = QueryCursor::new();
+        // let matches = collect_matches(
+        //     cursor.matches(&query, tree.root_node(), code.as_bytes()),
+        //     &query,
+        //     code,
+        // );
+        // assert_eq!(matches.len(), 2);
+    });
+}
+
+#[test]
 fn test_query_matches_with_simple_pattern() {
     allocations::record(|| {
         let language = get_language("javascript");

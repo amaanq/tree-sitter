@@ -2689,7 +2689,11 @@ static TSQueryError ts_query__parse_pattern(
       QueryStep repeat_step = query_step__new(WILDCARD_SYMBOL, depth, false);
       repeat_step.alternative_index = starting_step_index;
       repeat_step.is_pass_through = true;
-      repeat_step.alternative_is_immediate = true;
+
+      // In sibling sequences (where depth = 0), quantifiers must be anchored to prevent
+      // skipping siblings. Otherwise, they can match anywhere within the parent
+      repeat_step.alternative_is_immediate = depth == 0 ? true : is_immediate;
+
       array_push(&self->steps, repeat_step);
     }
 
@@ -2703,7 +2707,11 @@ static TSQueryError ts_query__parse_pattern(
       QueryStep repeat_step = query_step__new(WILDCARD_SYMBOL, depth, false);
       repeat_step.alternative_index = starting_step_index;
       repeat_step.is_pass_through = true;
-      repeat_step.alternative_is_immediate = true;
+
+      // In sibling sequences (where depth = 0), quantifiers must be anchored to prevent
+      // skipping siblings. Otherwise, they can match anywhere within the parent
+      repeat_step.alternative_is_immediate = depth == 0 ? true : is_immediate;
+
       array_push(&self->steps, repeat_step);
 
       // Stop when `step->alternative_index` is `NONE` or it points to
