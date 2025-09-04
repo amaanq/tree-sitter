@@ -249,17 +249,20 @@
               pkgs.rust-analyzer
               pkgs.rustfmt
               pkgs.cargo-cross
+              pkgs.cargo-workspaces
 
               pkgs.cmake
               pkgs.gnumake
               pkgs.pkg-config
               pkgs.clang
+              pkgs.clang-tools
               pkgs.libclang
 
               pkgs.nodejs_22
               pkgs.nodePackages.typescript
               pkgs.emscripten
               pkgs.pkgsCross.wasi32.stdenv.cc
+              pkgs.wasmtime
 
               pkgs.mdbook
               pkgs.mdbook-admonish
@@ -269,6 +272,23 @@
             ];
 
             shellHook = ''
+              if [ ! -f lib/compile_commands.json ] || [ lib/CMakeLists.txt -nt lib/compile_commands.json ]; then
+                echo "Generating compile_commands.json for C library with WASM support..."
+                mkdir -p lib/build
+                (cd lib/build && \
+                  CMAKE_INCLUDE_PATH="${pkgs.wasmtime}/include" \
+                  CMAKE_LIBRARY_PATH="${pkgs.wasmtime}/lib" \
+                  cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                    -DCMAKE_C_COMPILER="${pkgs.clang}/bin/clang" \
+                    -DTREE_SITTER_FEATURE_WASM=ON \
+                    -DCMAKE_C_FLAGS="-I${pkgs.wasmtime}/include" \
+                  .. && \
+                  # Post-process compile_commands.json to add wasmtime include
+                  sed -i 's|"command": "\([^"]*\)"|"command": "\1 -isystem ${pkgs.wasmtime}/include"|g' compile_commands.json && \
+                  cp compile_commands.json ../)
+                echo "✓ LSP configured with WASM support"
+              fi
+
               echo "Tree-sitter Dev Environment"
               echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
               echo ""

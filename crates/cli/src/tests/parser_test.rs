@@ -2038,3 +2038,39 @@ const fn simple_range(start: usize, end: usize) -> Range {
 fn chunked_input<'a>(text: &'a str, size: usize) -> impl FnMut(usize, Point) -> &'a [u8] {
     move |offset, _| &text.as_bytes()[offset..text.len().min(offset + size)]
 }
+
+// #[test]
+// fn test_parse_options_reborrow() {
+//     // Test that ParseOptions::reborrow() allows reusing options in multiple parse calls
+//     let mut parser = Parser::new();
+//     parser.set_language(&get_language("json")).unwrap();
+//
+//     let mut callback_count = 0;
+//     let mut callback = |_: &ParseState| {
+//         callback_count += 1;
+//         false // never cancel
+//     };
+//     let mut options = ParseOptions::new().progress_callback(&mut callback);
+//
+//     // Parse multiple times with the same options using reborrow
+//     let inputs = vec!["[1, 2, 3]", "[\"a\", \"b\", \"c\"]", "{\"key\": \"value\"}"];
+//
+//     for input in &inputs {
+//         let tree = parser.parse_with_options(
+//             &mut |i, _| {
+//                 let bytes = input.as_bytes();
+//                 if i < bytes.len() {
+//                     &bytes[i..]
+//                 } else {
+//                     &[]
+//                 }
+//             },
+//             None,
+//             Some(options.reborrow()),
+//         );
+//         assert!(tree.is_some());
+//     }
+//
+//     // Verify the callback was actually called
+//     assert!(callback_count > 0, "Progress callback should have been called");
+// }

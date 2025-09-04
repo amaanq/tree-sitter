@@ -181,6 +181,35 @@ impl<'a> ParseOptions<'a> {
         self.progress_callback = Some(callback);
         self
     }
+
+    /// Creates a new `ParseOptions` with a shorter lifetime that borrows from `self`.
+    ///
+    /// This is useful when you need to pass `ParseOptions` to multiple calls of
+    /// `parse_with_options`, which takes ownership of the options. By creating a
+    /// reborrowed instance, you can reuse the same options multiple times.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let mut options = ParseOptions::new();
+    /// // ... configure options ...
+    ///
+    /// for _ in 0..10 {
+    ///     let tree = parser.parse_with_options(
+    ///         callback,
+    ///         old_tree,
+    ///         Some(options.reborrow())
+    ///     )?;
+    /// }
+    /// ```
+    pub fn reborrow(&mut self) -> ParseOptions<'_> {
+        ParseOptions {
+            progress_callback: match &mut self.progress_callback {
+                Some(cb) => Some(*cb),
+                None => None,
+            },
+        }
+    }
 }
 
 #[derive(Default)]

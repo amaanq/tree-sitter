@@ -536,7 +536,11 @@ fn all_chars_are_alphabetical(cursor: &NfaCursor) -> bool {
         if is_sep {
             true
         } else {
-            chars.chars().all(|c| c.is_alphabetic() || c == '_')
+            // Allow non-whitespace printable ASCII characters for keywords
+            // This enables operator-based keywords while excluding control chars
+            chars.chars().all(|c| {
+                c.is_alphabetic() || c == '_' || (c.is_ascii_graphic() && !c.is_ascii_whitespace())
+            })
         }
     })
 }
