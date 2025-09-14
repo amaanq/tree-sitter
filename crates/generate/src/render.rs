@@ -551,6 +551,10 @@ impl Generator {
                         add_line!(self, ".visible = false,");
                         add_line!(self, ".named = false,");
                     }
+                    VariableType::EOF => {
+                        add_line!(self, ".visible = false,");
+                        add_line!(self, ".named = false,");
+                    }
                 }
             }
             dedent!(self);
@@ -1723,6 +1727,7 @@ impl Generator {
                 VariableType::Hidden | VariableType::Named => {
                     format!("sym_{}", self.sanitize_identifier(name))
                 }
+                VariableType::EOF => format!("eof_sym_{}", self.sanitize_identifier(name)),
             };
 
             let mut suffix_number = 1;

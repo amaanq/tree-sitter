@@ -8,7 +8,7 @@ use log::info;
 use super::{coincident_tokens::CoincidentTokenIndex, token_conflicts::TokenConflictMap};
 use crate::{
     dedup::split_state_id_groups,
-    grammars::{LexicalGrammar, SyntaxGrammar},
+    grammars::{LexicalGrammar, SyntaxGrammar, VariableType},
     nfa::{CharacterSet, NfaCursor},
     rules::{Symbol, TokenSet},
     tables::{AdvanceAction, LexState, LexTable, ParseStateId, ParseTable},
@@ -223,6 +223,15 @@ impl<'a> LexTableBuilder<'a> {
         // The EOF state is represented as an empty list of NFA states.
         let mut completion = None;
         for (id, prec) in self.cursor.completions() {
+            let variable = &self.lexical_grammar.variables[id];
+            if variable.kind == VariableType::EOF {
+                // EOF token only completes when we're actually at end of input
+                if eof_valid {
+                    completion = Some((id, prec));
+                }
+                continue;
+            }
+
             if let Some((prev_id, prev_precedence)) = completion {
                 if TokenConflictMap::prefer_token(
                     self.lexical_grammar,

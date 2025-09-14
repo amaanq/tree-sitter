@@ -248,6 +248,14 @@ impl NfaBuilder {
                 }
                 result
             }
+            Rule::Eof => {
+                self.nfa.states.push(NfaState::Accept {
+                    variable_index: 0,
+                    precedence: 0,
+                });
+
+                Ok(true)
+            }
             Rule::Blank => Ok(false),
             _ => Err(ExpandRuleError::UnexpectedRule(rule.clone()))?,
         }
