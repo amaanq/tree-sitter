@@ -331,8 +331,11 @@
               cmake
               gnumake
               pkg-config
-              clang
-              libclang
+              # clang
+              # libclang
+              llvmPackages_21.clang-unwrapped
+              llvmPackages_21.libclang
+              llvmPackages_21.lld
 
               nodejs_22
               nodePackages.typescript

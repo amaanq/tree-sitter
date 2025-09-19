@@ -1,5 +1,6 @@
 mod benchmark;
 mod build_wasm;
+mod build_wasm_freestanding;
 mod bump;
 mod check_wasm_exports;
 mod clippy;
@@ -24,6 +25,8 @@ enum Commands {
     /// Compile the Tree-sitter Wasm library. This will create two files in the
     /// `lib/binding_web` directory: `web-tree-sitter.js` and `web-tree-sitter.wasm`.
     BuildWasm(BuildWasm),
+    /// Compile the Tree-sitter Wasm library using freestanding compilation (no Emscripten).
+    BuildWasmFreestanding(BuildWasm),
     /// Compile the Tree-sitter Wasm standard library.
     BuildWasmStdlib,
     /// Bumps the version of the workspace.
@@ -224,6 +227,7 @@ fn run() -> Result<()> {
     match command {
         Commands::Benchmark(benchmark_options) => benchmark::run(&benchmark_options)?,
         Commands::BuildWasm(build_wasm_options) => build_wasm::run_wasm(&build_wasm_options)?,
+        Commands::BuildWasmFreestanding(build_wasm_options) => build_wasm_freestanding::run_wasm_freestanding(&build_wasm_options)?,
         Commands::BuildWasmStdlib => build_wasm::run_wasm_stdlib()?,
         Commands::BumpVersion(bump_options) => bump::run(bump_options)?,
         Commands::CheckWasmExports(check_options) => check_wasm_exports::run(&check_options)?,

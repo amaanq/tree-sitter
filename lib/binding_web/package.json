@@ -84,8 +84,8 @@
   },
   "scripts": {
     "build:ts": "tsc -b . && node script/build.js",
-    "build:wasm": "cd ../../ && cargo xtask build-wasm",
-    "build:wasm:debug": "cd ../../ && cargo xtask build-wasm --debug",
+    "build:wasm": "cd ../../ && cargo xtask build-wasm-freestanding",
+    "build:wasm:debug": "cd ../../ && cargo xtask build-wasm-freestanding --debug",
     "build": "npm run build:wasm && npm run build:ts",
     "build:debug": "npm run build:wasm:debug && npm run build:ts -- --debug",
     "build:dts": "node script/generate-dts.js",

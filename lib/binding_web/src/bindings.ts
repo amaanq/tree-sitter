@@ -1,4 +1,4 @@
-import createModule, { type MainModule } from '../lib/web-tree-sitter';
+import createModule, { type MainModule } from '../lib/wasm-loader.js';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { type Parser } from './parser';
 
