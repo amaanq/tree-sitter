@@ -120,6 +120,68 @@ pub struct InputEdit {
     pub new_end_position: Point,
 }
 
+impl InputEdit {
+    /// Edit a point to keep it in-sync with source code that has been edited.
+    ///
+    /// This function updates a single point's byte offset and row/column position
+    /// based on this edit operation. This is useful for editing points without
+    /// requiring a tree or node instance.
+    #[doc(alias = "ts_point_edit")]
+    pub fn edit_point(&self, point: &mut Point, point_byte: &mut usize) {
+        let edit = self.into();
+        let mut new_byte = *point_byte as u32;
+        let mut ts_point = (*point).into();
+
+        unsafe {
+            ffi::ts_point_edit(
+                core::ptr::addr_of_mut!(ts_point),
+                *point_byte as u32,
+                &edit,
+                core::ptr::addr_of_mut!(new_byte),
+            );
+        }
+
+        *point = ts_point.into();
+        *point_byte = new_byte as usize;
+    }
+
+    /// Edit a range to keep it in-sync with source code that has been edited.
+    ///
+    /// This function updates a range's start and end positions based on this edit
+    /// operation. This is useful for editing ranges without requiring a tree
+    /// or node instance.
+    #[doc(alias = "ts_range_edit")]
+    pub fn edit_range(&self, range: &mut Range) {
+        let edit = self.into();
+        let mut ts_range = (*range).into();
+
+        unsafe {
+            ffi::ts_range_edit(core::ptr::addr_of_mut!(ts_range), &edit);
+        }
+
+        *range = ts_range.into();
+    }
+
+    /// Edit multiple ranges to keep them in-sync with source code that has been edited.
+    ///
+    /// This function updates an array of ranges based on this edit operation.
+    /// This is useful for editing injection ranges or other collections of ranges
+    /// without requiring tree instances.
+    #[doc(alias = "ts_ranges_edit")]
+    pub fn edit_ranges(&self, ranges: &mut [Range]) {
+        let edit = self.into();
+        let mut ts_ranges: Vec<ffi::TSRange> = ranges.iter().map(|r| (*r).into()).collect();
+
+        unsafe {
+            ffi::ts_ranges_edit(ts_ranges.as_mut_ptr(), ts_ranges.len() as u32, &edit);
+        }
+
+        for (i, ts_range) in ts_ranges.into_iter().enumerate() {
+            ranges[i] = ts_range.into();
+        }
+    }
+}
+
 /// A single node within a syntax [`Tree`].
 #[doc(alias = "TSNode")]
 #[derive(Clone, Copy)]

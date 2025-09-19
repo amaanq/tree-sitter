@@ -844,6 +844,163 @@ fn test_node_is_error() {
 }
 
 #[test]
+fn test_edit_point() {
+    use tree_sitter::{InputEdit, Point};
+
+    let edit = InputEdit {
+        start_byte: 5,
+        old_end_byte: 5,
+        new_end_byte: 10,
+        start_position: Point::new(0, 5),
+        old_end_position: Point::new(0, 5),
+        new_end_position: Point::new(0, 10),
+    };
+
+    // Test point after edit
+    let mut point = Point::new(0, 8);
+    let mut byte = 8;
+    edit.edit_point(&mut point, &mut byte);
+    assert_eq!(point, Point::new(0, 13));
+    assert_eq!(byte, 13);
+
+    // Test point before edit
+    let mut point = Point::new(0, 2);
+    let mut byte = 2;
+    edit.edit_point(&mut point, &mut byte);
+    assert_eq!(point, Point::new(0, 2));
+    assert_eq!(byte, 2);
+
+    // Test point at edit start
+    let mut point = Point::new(0, 5);
+    let mut byte = 5;
+    edit.edit_point(&mut point, &mut byte);
+    assert_eq!(point, Point::new(0, 10));
+    assert_eq!(byte, 10);
+}
+
+#[test]
+fn test_edit_range() {
+    use tree_sitter::{InputEdit, Point, Range};
+
+    let edit = InputEdit {
+        start_byte: 10,
+        old_end_byte: 15,
+        new_end_byte: 20,
+        start_position: Point::new(1, 0),
+        old_end_position: Point::new(1, 5),
+        new_end_position: Point::new(1, 10),
+    };
+
+    // Test range after edit (same row, so points stay the same)
+    let mut range = Range {
+        start_byte: 20,
+        end_byte: 25,
+        start_point: Point::new(2, 0),
+        end_point: Point::new(2, 5),
+    };
+    edit.edit_range(&mut range);
+    assert_eq!(range.start_byte, 25);
+    assert_eq!(range.end_byte, 30);
+    assert_eq!(range.start_point, Point::new(2, 0)); // Points unchanged when edit is on same row
+    assert_eq!(range.end_point, Point::new(2, 5));
+
+    // Test range before edit
+    let mut range = Range {
+        start_byte: 5,
+        end_byte: 8,
+        start_point: Point::new(0, 5),
+        end_point: Point::new(0, 8),
+    };
+    edit.edit_range(&mut range);
+    assert_eq!(range.start_byte, 5);
+    assert_eq!(range.end_byte, 8);
+    assert_eq!(range.start_point, Point::new(0, 5));
+    assert_eq!(range.end_point, Point::new(0, 8));
+
+    // Test range overlapping edit
+    let mut range = Range {
+        start_byte: 8,
+        end_byte: 12,
+        start_point: Point::new(0, 8),
+        end_point: Point::new(1, 2),
+    };
+    edit.edit_range(&mut range);
+    assert_eq!(range.start_byte, 8);
+    assert_eq!(range.end_byte, 10);
+    assert_eq!(range.start_point, Point::new(0, 8));
+    assert_eq!(range.end_point, Point::new(1, 0));
+}
+
+#[test]
+fn test_edit_ranges() {
+    use tree_sitter::{InputEdit, Point, Range};
+
+    let edit = InputEdit {
+        start_byte: 10,
+        old_end_byte: 10,
+        new_end_byte: 15,
+        start_position: Point::new(1, 0),
+        old_end_position: Point::new(1, 0),
+        new_end_position: Point::new(1, 5),
+    };
+
+    let mut ranges = vec![
+        Range {
+            start_byte: 5,
+            end_byte: 8,
+            start_point: Point::new(0, 5),
+            end_point: Point::new(0, 8),
+        },
+        Range {
+            start_byte: 15,
+            end_byte: 20,
+            start_point: Point::new(2, 0),
+            end_point: Point::new(2, 5),
+        },
+    ];
+
+    edit.edit_ranges(&mut ranges);
+
+    // First range should be unchanged (before edit)
+    assert_eq!(ranges[0].start_byte, 5);
+    assert_eq!(ranges[0].end_byte, 8);
+
+    // Second range should be shifted (after edit)
+    assert_eq!(ranges[1].start_byte, 20);
+    assert_eq!(ranges[1].end_byte, 25);
+    assert_eq!(ranges[1].start_point, Point::new(2, 0)); // Points unchanged when edit is on same row
+    assert_eq!(ranges[1].end_point, Point::new(2, 5));
+}
+
+#[test]
+fn test_edit_range_with_newlines() {
+    use tree_sitter::{InputEdit, Point, Range};
+
+    // Edit that spans multiple lines
+    let edit = InputEdit {
+        start_byte: 10,
+        old_end_byte: 15,
+        new_end_byte: 20,
+        start_position: Point::new(1, 0),
+        old_end_position: Point::new(1, 5),
+        new_end_position: Point::new(2, 0), // Edit crosses to next line
+    };
+
+    // Test range after edit - should get row updates
+    let mut range = Range {
+        start_byte: 20,
+        end_byte: 25,
+        start_point: Point::new(2, 0),
+        end_point: Point::new(2, 5),
+    };
+    edit.edit_range(&mut range);
+    assert_eq!(range.start_byte, 25);
+    assert_eq!(range.end_byte, 30);
+    assert_eq!(range.start_point, Point::new(3, 0)); // Row shifted by 1
+    assert_eq!(range.end_point, Point::new(3, 5)); // Row shifted by 1
+}
+
+#[test]
 fn test_node_sexp() {
     let mut parser = Parser::new();
     parser.set_language(&get_language("javascript")).unwrap();

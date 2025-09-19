@@ -708,6 +708,33 @@ void ts_node_edit(TSNode *self, const TSInputEdit *edit);
  */
 bool ts_node_eq(TSNode self, TSNode other);
 
+/**
+ * Edit a point to keep it in-sync with source code that has been edited.
+ *
+ * This function updates a single point's byte offset and row/column position
+ * based on an edit operation. This is useful for editing points without
+ * requiring a tree or node instance.
+ */
+void ts_point_edit(TSPoint *point, uint32_t point_byte, const TSInputEdit *edit, uint32_t *new_byte);
+
+/**
+ * Edit a range to keep it in-sync with source code that has been edited.
+ *
+ * This function updates a range's start and end positions based on an edit
+ * operation. This is useful for editing ranges without requiring a tree
+ * or node instance.
+ */
+void ts_range_edit(TSRange *range, const TSInputEdit *edit);
+
+/**
+ * Edit multiple ranges to keep them in-sync with source code that has been edited.
+ *
+ * This function updates an array of ranges based on an edit operation.
+ * This is useful for editing injection ranges or other collections of ranges
+ * without requiring tree instances.
+ */
+void ts_ranges_edit(TSRange *ranges, uint32_t count, const TSInputEdit *edit);
+
 /************************/
 /* Section - TreeCursor */
 /************************/
