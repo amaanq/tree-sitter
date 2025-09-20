@@ -3,7 +3,6 @@ name: Build & Test
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  CROSS_DEBUG: 1
 
 on:
   workflow_call:
@@ -36,22 +35,22 @@ jobs:
           # When adding a new `target`:
           # 1. Define a new platform alias above
           # 2. Add a new record to the matrix map in `cli/npm/install.js`
-          - { platform: linux-arm64       , target: aarch64-unknown-linux-gnu     , os: ubuntu-24.04-arm , features: wasm  }
-          - { platform: linux-arm         , target: armv7-unknown-linux-gnueabihf , os: ubuntu-latest    , use-cross: true }
-          - { platform: linux-x64         , target: x86_64-unknown-linux-gnu      , os: ubuntu-22.04     , features: wasm  }
-          - { platform: linux-x86         , target: i686-unknown-linux-gnu        , os: ubuntu-latest    , use-cross: true }
-          - { platform: linux-powerpc64   , target: powerpc64-unknown-linux-gnu   , os: ubuntu-latest    , use-cross: true }
-          - { platform: windows-arm64     , target: aarch64-pc-windows-msvc       , os: windows-latest                     }
-          - { platform: windows-x64       , target: x86_64-pc-windows-msvc        , os: windows-latest   , features: wasm  }
-          - { platform: windows-x86       , target: i686-pc-windows-msvc          , os: windows-latest                     }
-          - { platform: macos-arm64       , target: aarch64-apple-darwin          , os: macos-latest     , features: wasm  }
-          - { platform: macos-x64         , target: x86_64-apple-darwin           , os: macos-13         , features: wasm  }
-          - { platform: wasm32            , target: wasm32-unknown-unknown        , os: ubuntu-latest    , no-run: true    }
+          - { platform: linux-arm64       , target: aarch64-unknown-linux-gnu     , os: ubuntu-24.04-arm , features: wasm }
+          - { platform: linux-arm         , target: armv7-unknown-linux-gnueabihf , os: ubuntu-latest    , emulated: true }
+          - { platform: linux-x64         , target: x86_64-unknown-linux-gnu      , os: ubuntu-22.04     , features: wasm }
+          - { platform: linux-x86         , target: i686-unknown-linux-gnu        , os: ubuntu-latest    , emulated: true }
+          - { platform: linux-powerpc64   , target: powerpc64-unknown-linux-gnu   , os: ubuntu-latest    , emulated: true }
+          - { platform: windows-arm64     , target: aarch64-pc-windows-msvc       , os: windows-latest                    }
+          - { platform: windows-x64       , target: x86_64-pc-windows-msvc        , os: windows-latest   , features: wasm }
+          - { platform: windows-x86       , target: i686-pc-windows-msvc          , os: windows-latest                    }
+          - { platform: macos-arm64       , target: aarch64-apple-darwin          , os: macos-latest     , features: wasm }
+          - { platform: macos-x64         , target: x86_64-apple-darwin           , os: macos-13         , features: wasm }
+          - { platform: wasm32            , target: wasm32-unknown-unknown        , os: ubuntu-latest    , no-run: true   }
 
           # Cross compilers for C library
           - { platform: linux-arm64       , cc: aarch64-linux-gnu-gcc           , ar: aarch64-linux-gnu-ar   }
           - { platform: linux-arm         , cc: arm-linux-gnueabihf-gcc         , ar: arm-linux-gnueabihf-ar }
-          - { platform: linux-x86         , cc: i686-linux-gnu-gcc              , ar: i686-linux-gnu-ar      }
+          - { platform: linux-x86         , cc: gcc -m32                        , ar: ar                     }
           - { platform: linux-powerpc64   , cc: powerpc64-linux-gnu-gcc         , ar: powerpc64-linux-gnu-ar }
 
           # Prevent race condition (see #2041)
@@ -77,7 +76,7 @@ jobs:
       run: printf 'EMSCRIPTEN_VERSION=%s\n' "$(<crates/loader/emscripten-version)" >> $GITHUB_ENV
 
     - name: Install Emscripten
-      if: ${{ !matrix.no-run && !matrix.use-cross }}
+      if: ${{ !matrix.no-run && !matrix.emulated }}
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EMSCRIPTEN_VERSION }}
@@ -87,39 +86,64 @@ jobs:
       with:
         target: ${{ matrix.target }}
 
-    - name: Install cross
-      if: ${{ matrix.use-cross }}
+    - name: Install QEMU and cross-compilation toolchains
+      if: ${{ matrix.emulated }}
       run: |
-        if [ ! -x "$(command -v cross)" ]; then
-          # TODO: Remove 'RUSTFLAGS=""' once https://github.com/cross-rs/cross/issues/1561 is resolved
-          RUSTFLAGS="" cargo install cross --git https://github.com/cross-rs/cross
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static binfmt-support
+
+        if [[ "${{ matrix.target }}" == "armv7-unknown-linux-gnueabihf" ]]; then
+          sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
+          echo "CARGO_BUILD_TARGET=armv7-unknown-linux-gnueabihf" >> $GITHUB_ENV
+          echo "CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
+          echo "CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
+          echo "CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++" >> $GITHUB_ENV
+          echo "AR_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-ar" >> $GITHUB_ENV
+          echo "CFLAGS_armv7_unknown_linux_gnueabihf=-ffunction-sections -fdata-sections -fPIC -march=armv7-a -mfpu=vfpv3-d16" >> $GITHUB_ENV
+          echo "BINDGEN_EXTRA_CLANG_ARGS_armv7_unknown_linux_gnueabihf=--sysroot=/usr/arm-linux-gnueabihf -idirafter/usr/include" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/" >> $GITHUB_ENV
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+          echo "QEMU_LD_PREFIX=/usr/arm-linux-gnueabihf" >> $GITHUB_ENV
+          # Override global CC to force build scripts to use ARM compiler
+          echo "CC=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
+          echo "CXX=arm-linux-gnueabihf-g++" >> $GITHUB_ENV
+          echo "LD=arm-linux-gnueabihf-ld" >> $GITHUB_ENV
+          echo "CFLAGS=-ffunction-sections -fdata-sections -fPIC -march=armv7-a -mfpu=vfpv3-d16" >> $GITHUB_ENV
+        elif [[ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]]; then
+          sudo apt-get install -y gcc-multilib libc6-dev-i386
+          echo "CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER=gcc" >> $GITHUB_ENV
+          echo "CC_i686_unknown_linux_gnu=gcc -m32" >> $GITHUB_ENV
+          echo "CXX_i686_unknown_linux_gnu=g++ -m32" >> $GITHUB_ENV
+        elif [[ "${{ matrix.target }}" == "powerpc64-unknown-linux-gnu" ]]; then
+          sudo apt-get install -y gcc-powerpc64-linux-gnu libc6-dev-ppc64-cross
+          echo "CARGO_BUILD_TARGET=powerpc64-unknown-linux-gnu" >> $GITHUB_ENV
+          echo "CARGO_TARGET_POWERPC64_UNKNOWN_LINUX_GNU_LINKER=powerpc64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CC_powerpc64_unknown_linux_gnu=powerpc64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CXX_powerpc64_unknown_linux_gnu=powerpc64-linux-gnu-g++" >> $GITHUB_ENV
+          echo "AR_powerpc64_unknown_linux_gnu=powerpc64-linux-gnu-ar" >> $GITHUB_ENV
+          echo "CFLAGS_powerpc64_unknown_linux_gnu=-ffunction-sections -fdata-sections -fPIC -m64" >> $GITHUB_ENV
+          echo "BINDGEN_EXTRA_CLANG_ARGS_powerpc64_unknown_linux_gnu=--sysroot=/usr/powerpc64-linux-gnu -idirafter/usr/include" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=/usr/lib/powerpc64-linux-gnu/pkgconfig/" >> $GITHUB_ENV
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+          echo "QEMU_LD_PREFIX=/usr/powerpc64-linux-gnu" >> $GITHUB_ENV
+          # Override global CC to force build scripts to use PowerPC compiler
+          echo "CC=powerpc64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CXX=powerpc64-linux-gnu-g++" >> $GITHUB_ENV
+          echo "LD=powerpc64-linux-gnu-ld" >> $GITHUB_ENV
+          echo "CFLAGS=-ffunction-sections -fdata-sections -fPIC -m64" >> $GITHUB_ENV
         fi
 
-    - name: Configure cross
-      if: ${{ matrix.use-cross }}
-      run: |
-        printf '%s\n' > Cross.toml \
-          '[target.${{ matrix.target }}]'                                   \
-          'image = "ghcr.io/cross-rs/${{ matrix.target }}:edge"'            \
-          '[build]'                                                         \
-          'pre-build = ['                                                   \
-          '  "dpkg --add-architecture $CROSS_DEB_ARCH",'                    \
-          '  "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",'  \
-          '  "apt-get update && apt-get -y install libssl-dev nodejs"'      \
-          ']'
-        cat - Cross.toml <<< 'Cross.toml:'
-        printf '%s\n' >> $GITHUB_ENV \
-          "CROSS_CONFIG=$PWD/Cross.toml" \
-          "CROSS_IMAGE=ghcr.io/cross-rs/${{ matrix.target }}:edge"
+        sudo systemctl restart systemd-binfmt
 
     - name: Set up environment
       env:
         RUST_TEST_THREADS: ${{ matrix.rust-test-threads }}
-        USE_CROSS: ${{ matrix.use-cross }}
         TARGET: ${{ matrix.target }}
         CC: ${{ matrix.cc }}
         AR: ${{ matrix.ar }}
       run: |
+        echo "DEBUG: Starting environment setup for target: $TARGET"
+        set -x
         PATH="$PWD/.github/scripts:$PATH"
         printf '%s/.github/scripts\n' "$PWD" >> $GITHUB_PATH
 
@@ -133,17 +157,13 @@ jobs:
 
         [[ -n $CC ]] && printf 'CC=%s\n' "$CC" >> $GITHUB_ENV
         [[ -n $AR ]] && printf 'AR=%s\n' "$AR" >> $GITHUB_ENV
-
-        if [[ $USE_CROSS == true ]]; then
-          printf 'BUILD_CMD=cross\n' >> $GITHUB_ENV
-          runner=$(cross.sh bash -c "env | sed -n 's/^CARGO_TARGET_.*_RUNNER=//p'")
-          [[ -n $runner ]] && printf 'CROSS_RUNNER=%s\n' "$runner" >> $GITHUB_ENV
-        fi
+        set +x
+        echo "DEBUG: Environment setup completed"
 
     # TODO: Remove RUSTFLAGS="--cap-lints allow" once we use a wasmtime release that addresses
     # the `mismatched-lifetime-syntaxes` lint
     - name: Build wasmtime library (Windows x64 MSYS2)
-      if: ${{ !matrix.use-cross && contains(matrix.features, 'wasm') && matrix.platform == 'windows-x64' }}
+      if: ${{ !matrix.emulated && contains(matrix.features, 'wasm') && matrix.platform == 'windows-x64' }}
       run: |
         mkdir -p target
         WASMTIME_VERSION=$(cargo metadata --format-version=1 --locked --features wasm | \
@@ -199,7 +219,7 @@ jobs:
     # TODO: Remove RUSTFLAGS="--cap-lints allow" once we use a wasmtime release that addresses
     # the `mismatched-lifetime-syntaxes` lint
     - name: Build wasmtime library
-      if: ${{ !matrix.use-cross && contains(matrix.features, 'wasm') }}
+      if: ${{ !matrix.emulated && contains(matrix.features, 'wasm') }}
       run: |
         mkdir -p target
         WASMTIME_VERSION=$(cargo metadata --format-version=1 --locked --features wasm | \
@@ -224,7 +244,6 @@ jobs:
         CFLAGS: -g -Werror -Wall -Wextra -Wshadow -Wpedantic -Werror=incompatible-pointer-types
 
     - name: Build C library (CMake)
-      if: ${{ !matrix.use-cross }}
       run: |
         cmake -S . -B build/static \
           -DBUILD_SHARED_LIBS=OFF \
@@ -240,12 +259,11 @@ jobs:
           -DTREE_SITTER_FEATURE_WASM=$WASM
         cmake --build build/shared --verbose
       env:
-        CC: ${{ contains(matrix.target, 'linux') && 'clang' || '' }}
         WASM: ${{ contains(matrix.features, 'wasm') && 'ON' || 'OFF' }}
 
     - name: Build wasm library
       # No reason to build on the same Github runner hosts many times
-      if: ${{ !matrix.no-run && !matrix.use-cross }}
+      if: ${{ !matrix.no-run && !matrix.emulated }}
       shell: bash
       run: |
         cd lib/binding_web
@@ -284,7 +302,7 @@ jobs:
       run: $BUILD_CMD run -p xtask --target=${{ matrix.target }} -- generate-fixtures
 
     - name: Generate Wasm fixtures
-      if: ${{ !matrix.no-run && !matrix.use-cross && inputs.run-test && steps.cache.outputs.cache-hit != 'true' }}
+      if: ${{ !matrix.no-run && !matrix.emulated && inputs.run-test && steps.cache.outputs.cache-hit != 'true' }}
       run: $BUILD_CMD run -p xtask --target=${{ matrix.target }} -- generate-fixtures --wasm
 
     - name: Run main tests
@@ -292,7 +310,7 @@ jobs:
       run: $BUILD_CMD test --target=${{ matrix.target }} --features=${{ matrix.features }}
 
     - name: Run wasm tests
-      if: ${{ !matrix.no-run && !matrix.use-cross && inputs.run-test }}
+      if: ${{ !matrix.no-run && !matrix.emulated && inputs.run-test }}
       run: $BUILD_CMD run -p xtask --target=${{ matrix.target }} -- test-wasm
 
     - name: Upload CLI artifact
