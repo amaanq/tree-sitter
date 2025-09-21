@@ -1495,7 +1495,8 @@ impl Tree {
         #[cfg(windows)]
         {
             let handle = file.as_raw_handle();
-            unsafe { ffi::ts_tree_print_dot_graph(self.0.as_ptr(), handle as i32) }
+            let fd = unsafe { _open_osfhandle(handle as intptr_t, 0) };
+            unsafe { ffi::ts_tree_print_dot_graph(self.0.as_ptr(), fd) }
         }
     }
 }
