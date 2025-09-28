@@ -9,8 +9,8 @@ use std::{
     time::Instant,
 };
 
-use ansi_colours::{ansi256_from_rgb, rgb_from_ansi256};
 use anstyle::{Ansi256Color, AnsiColor, Color, Effects, RgbColor};
+use anstyle_lossy::{rgb_to_xterm, xterm_to_rgb};
 use anyhow::Result;
 use log::{info, warn};
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
@@ -223,7 +223,7 @@ fn parse_style(style: &mut Style, json: Value) {
 
     if let Some(Color::Rgb(RgbColor(red, green, blue))) = style.ansi.get_fg_color() {
         if !terminal_supports_truecolor() {
-            let ansi256 = Color::Ansi256(Ansi256Color(ansi256_from_rgb((red, green, blue))));
+            let ansi256 = Color::Ansi256(rgb_to_xterm(RgbColor(red, green, blue)));
             style.ansi = style.ansi.fg_color(Some(ansi256));
         }
     }
@@ -301,7 +301,7 @@ fn write_color(buffer: &mut String, color: Color) {
             _ => unreachable!(),
         },
         Color::Ansi256(Ansi256Color(n)) => {
-            let (r, g, b) = rgb_from_ansi256(n);
+            let RgbColor(r, g, b) = xterm_to_rgb(Ansi256Color(n), anstyle_lossy::palette::VGA);
             write!(buffer, "color: #{r:02x}{g:02x}{b:02x}").unwrap();
         }
         Color::Rgb(RgbColor(r, g, b)) => write!(buffer, "color: #{r:02x}{g:02x}{b:02x}").unwrap(),
@@ -496,7 +496,7 @@ mod tests {
         parse_style(&mut style, Value::String(JUNGLE_GREEN.to_string()));
         assert_eq!(
             style.ansi.get_fg_color(),
-            Some(Color::Ansi256(Ansi256Color(72)))
+            Some(Color::Ansi256(Ansi256Color(36)))
         );
         assert_eq!(style.css, Some("color: #26a69a".to_string()));
 

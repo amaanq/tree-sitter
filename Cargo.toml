@@ -102,8 +102,8 @@ incremental = true
 codegen-units = 256
 
 [workspace.dependencies]
-ansi_colours = "1.2.3"
 anstyle = "1.0.11"
+anstyle-lossy = "1.1.4"
 anyhow = "1.0.100"
 bstr = "1.12.0"
 cc = "1.2.39"

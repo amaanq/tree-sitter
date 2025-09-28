@@ -35,8 +35,8 @@ wasm = ["tree-sitter/wasm", "tree-sitter-loader/wasm"]
 qjs-rt = ["tree-sitter-generate/qjs-rt"]
 
 [dependencies]
-ansi_colours.workspace = true
 anstyle.workspace = true
+anstyle-lossy.workspace = true
 anyhow.workspace = true
 bstr.workspace = true
 clap.workspace = true
