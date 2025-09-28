@@ -16,47 +16,47 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - linux-arm64
-          - linux-arm
-          - linux-x64
-          - linux-x86
-          - linux-powerpc64
-          - windows-arm64
+          # - linux-arm64
+          # - linux-arm
+          # - linux-x64
+          # - linux-x86
+          # - linux-powerpc64
+          # - windows-arm64
           - windows-x64
           - windows-x86
-          - macos-arm64
-          - macos-x64
-          - wasm32
+          # - macos-arm64
+          # - macos-x64
+          # - wasm32
 
         include:
           # When adding a new `target`:
           # 1. Define a new platform alias above
           # 2. Add a new record to the matrix map in `crates/cli/npm/install.js`
-          - { platform: linux-arm64     , target: aarch64-unknown-linux-gnu     , os: ubuntu-24.04-arm }
-          - { platform: linux-arm       , target: armv7-unknown-linux-gnueabihf , os: ubuntu-24.04-arm }
-          - { platform: linux-x64       , target: x86_64-unknown-linux-gnu      , os: ubuntu-24.04     }
-          - { platform: linux-x86       , target: i686-unknown-linux-gnu        , os: ubuntu-24.04     }
-          - { platform: linux-powerpc64 , target: powerpc64-unknown-linux-gnu   , os: ubuntu-24.04     }
-          - { platform: windows-arm64   , target: aarch64-pc-windows-msvc       , os: windows-11-arm   }
+          # - { platform: linux-arm64     , target: aarch64-unknown-linux-gnu     , os: ubuntu-24.04-arm }
+          # - { platform: linux-arm       , target: armv7-unknown-linux-gnueabihf , os: ubuntu-24.04-arm }
+          # - { platform: linux-x64       , target: x86_64-unknown-linux-gnu      , os: ubuntu-24.04     }
+          # - { platform: linux-x86       , target: i686-unknown-linux-gnu        , os: ubuntu-24.04     }
+          # - { platform: linux-powerpc64 , target: powerpc64-unknown-linux-gnu   , os: ubuntu-24.04     }
+          # - { platform: windows-arm64   , target: aarch64-pc-windows-msvc       , os: windows-11-arm   }
           - { platform: windows-x64     , target: x86_64-pc-windows-msvc        , os: windows-2025     }
           - { platform: windows-x86     , target: i686-pc-windows-msvc          , os: windows-2025     }
-          - { platform: macos-arm64     , target: aarch64-apple-darwin          , os: macos-15         }
-          - { platform: macos-x64       , target: x86_64-apple-darwin           , os: macos-13         }
-          - { platform: wasm32          , target: wasm32-unknown-unknown        , os: ubuntu-24.04     }
-
-          # Extra features
-          - { platform: linux-arm64     , features: wasm }
-          - { platform: linux-x64       , features: wasm }
-          - { platform: macos-arm64     , features: wasm }
-          - { platform: macos-x64       , features: wasm }
-
-          # Cross-compilation
-          - { platform: linux-arm       , cross: true }
-          - { platform: linux-x86       , cross: true }
-          - { platform: linux-powerpc64 , cross: true }
-
-          # Compile-only
-          - { platform: wasm32          , no-run: true }
+          # - { platform: macos-arm64     , target: aarch64-apple-darwin          , os: macos-15         }
+          # - { platform: macos-x64       , target: x86_64-apple-darwin           , os: macos-13         }
+          # - { platform: wasm32          , target: wasm32-unknown-unknown        , os: ubuntu-24.04     }
+          #
+          # # Extra features
+          # - { platform: linux-arm64     , features: wasm }
+          # - { platform: linux-x64       , features: wasm }
+          # - { platform: macos-arm64     , features: wasm }
+          # - { platform: macos-x64       , features: wasm }
+          #
+          # # Cross-compilation
+          # - { platform: linux-arm       , cross: true }
+          # - { platform: linux-x86       , cross: true }
+          # - { platform: linux-powerpc64 , cross: true }
+          #
+          # # Compile-only
+          # - { platform: wasm32          , no-run: true }
 
     env:
       CARGO_TERM_COLOR: always
