@@ -44,7 +44,8 @@ jobs:
             exe=$(ls artifacts/tree-sitter.$platform/tree-sitter*)
             suffix="${exe##*/tree-sitter}"
             cp "$exe" "tree-sitter-$platform$suffix"
-            gzip --stdout --name "tree-sitter-$platform$suffix" > "target/tree-sitter-$platform.gz"
+            gzip "tree-sitter-$platform$suffix"
+            mv "tree-sitter-$platform$suffix.gz" "target/tree-sitter-$platform.gz"
           done
           rm -rf artifacts
           ls -l target/
