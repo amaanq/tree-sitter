@@ -54,6 +54,10 @@ struct TSLexer {
   bool (*is_at_included_range_start)(const TSLexer *);
   bool (*eof)(const TSLexer *);
   void (*log)(const TSLexer *, const char *, ...);
+  bool at_start_of_text;
+  bool at_end_of_text;
+  bool at_start_of_line;
+  bool at_end_of_line;
 };
 
 typedef enum {

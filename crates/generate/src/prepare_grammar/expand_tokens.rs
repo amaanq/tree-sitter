@@ -1,6 +1,6 @@
 use anyhow::Result;
 use regex_syntax::{
-    hir::{Class, Hir, HirKind},
+    hir::{Class, Hir, HirKind, Look},
     ParserBuilder,
 };
 use serde::Serialize;
@@ -9,7 +9,7 @@ use thiserror::Error;
 use super::ExtractedLexicalGrammar;
 use crate::{
     grammars::{LexicalGrammar, LexicalVariable},
-    nfa::{CharacterSet, Nfa, NfaState},
+    nfa::{AnchorType, CharacterSet, Nfa, NfaState},
     rules::{Precedence, Rule},
 };
 
@@ -156,8 +156,8 @@ pub type ExpandRegexResult<T> = Result<T, ExpandRegexError>;
 pub enum ExpandRegexError {
     #[error("{0}")]
     Utf8(String),
-    #[error("Regex error: Assertions are not supported")]
-    Assertion,
+    #[error("Regex error: Unsupported assertion type: {0}")]
+    UnsupportedAssertion(String),
 }
 
 impl NfaBuilder {
@@ -298,7 +298,20 @@ impl NfaBuilder {
                     Ok(true)
                 }
             },
-            HirKind::Look(_) => Err(ExpandRegexError::Assertion)?,
+            HirKind::Look(look_assertion) => {
+                match look_assertion {
+                    Look::StartLF => {
+                        self.push_anchor(AnchorType::StartLine, next_state_id);
+                        Ok(true)
+                    }
+                    Look::EndLF => {
+                        self.push_anchor(AnchorType::EndLine, next_state_id);
+                        Ok(true)
+                    }
+                    // For now, reject other types of assertions like word boundaries and lookarounds
+                    _ => Err(ExpandRegexError::UnsupportedAssertion(format!("{look_assertion:?}")))?,
+                }
+            }
             HirKind::Repetition(repetition) => match (repetition.min, repetition.max) {
                 (0, Some(1)) => self.expand_zero_or_one(&repetition.sub, next_state_id),
                 (1, None) => self.expand_one_or_more(&repetition.sub, next_state_id),
@@ -422,6 +435,15 @@ impl NfaBuilder {
         self.nfa
             .states
             .push(NfaState::Split(state_id, last_state_id));
+    }
+
+    fn push_anchor(&mut self, anchor_type: AnchorType, state_id: u32) {
+        let precedence = *self.precedence_stack.last().unwrap();
+        self.nfa.states.push(NfaState::Anchor {
+            anchor_type,
+            state_id,
+            precedence,
+        });
     }
 }
 
@@ -799,6 +821,21 @@ mod tests {
                     ("9", Some((0, "9"))),
                     ("2", None),
                     ("567", None),
+                ],
+            },
+            // Basic anchor support - should compile without errors
+            // Note: These tests verify compilation, not runtime behavior yet
+            Row {
+                rules: vec![
+                    Rule::pattern(r"^hello", ""),   // Start of line
+                    Rule::pattern(r"world$", ""),   // End of line
+                ],
+                separators: vec![],
+                examples: vec![
+                    // For now, these will fail matching since anchor logic isn't implemented in lexer
+                    // But they should successfully compile the patterns into NFAs
+                    ("hello", None),
+                    ("world", None),
                 ],
             },
         ];

@@ -54,6 +54,10 @@ struct TSLexer {
   bool (*is_at_included_range_start)(const TSLexer *);
   bool (*eof)(const TSLexer *);
   void (*log)(const TSLexer *, const char *, ...);
+  bool at_start_of_text;
+  bool at_end_of_text;
+  bool at_start_of_line;
+  bool at_end_of_line;
 };
 
 typedef enum {
@@ -222,6 +226,29 @@ static inline bool set_contains(const TSCharacterRange *ranges, uint32_t len, in
   lexer->mark_end(lexer);
 
 #define END_STATE() return result;
+
+/*
+ * Anchor Checking Macros
+ */
+#define CHECK_ANCHOR_START_TEXT() \
+  do { \
+    if (!lexer->at_start_of_text) return false; \
+  } while(0)
+
+#define CHECK_ANCHOR_END_TEXT() \
+  do { \
+    if (!lexer->at_end_of_text) return false; \
+  } while(0)
+
+#define CHECK_ANCHOR_START_LINE() \
+  do { \
+    if (!lexer->at_start_of_line) return false; \
+  } while(0)
+
+#define CHECK_ANCHOR_END_LINE() \
+  do { \
+    if (!lexer->at_end_of_line) return false; \
+  } while(0)
 
 /*
  *  Parse Table Macros

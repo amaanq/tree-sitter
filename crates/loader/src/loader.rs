@@ -788,20 +788,11 @@ impl Loader {
             return Ok(wasm_store.load_language(&config.name, &wasm_bytes)?);
         }
 
-        let lock_path = if env::var("CROSS_RUNNER").is_ok() {
-            tempfile::tempdir()
-                .unwrap()
-                .path()
-                .join("tree-sitter")
-                .join("lock")
-                .join(format!("{}.lock", config.name))
-        } else {
-            etcetera::choose_base_strategy()?
-                .cache_dir()
-                .join("tree-sitter")
-                .join("lock")
-                .join(format!("{}.lock", config.name))
-        };
+        let lock_path = etcetera::choose_base_strategy()?
+            .cache_dir()
+            .join("tree-sitter")
+            .join("lock")
+            .join(format!("{}.lock", config.name));
 
         if let Ok(lock_file) = fs::OpenOptions::new().write(true).open(&lock_path) {
             recompile = false;

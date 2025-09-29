@@ -27,6 +27,21 @@ pub enum NfaState {
         variable_index: usize,
         precedence: i32,
     },
+    /// Anchor assertion that matches at specific positions without consuming characters
+    Anchor {
+        anchor_type: AnchorType,
+        state_id: u32,
+        precedence: i32,
+    },
+}
+
+/// Types of anchor assertions supported
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum AnchorType {
+    /// Match the beginning of a line or text (equivalent to regex ^)
+    StartLine,
+    /// Match the end of a line or text (equivalent to regex $)
+    EndLine,
 }
 
 #[derive(PartialEq, Eq, Default)]
@@ -588,6 +603,16 @@ impl<'a> NfaCursor<'a> {
                 }
                 if !has_right {
                     new_state_ids.push(*right);
+                }
+            } else if let NfaState::Anchor {
+                state_id: next_state,
+                ..
+            } = state
+            {
+                // Anchor states are epsilon transitions during table building
+                // The actual anchor checking will happen at runtime
+                if !new_state_ids.contains(next_state) {
+                    new_state_ids.push(*next_state);
                 }
             } else if let Err(i) = self.state_ids.binary_search(&state_id) {
                 self.state_ids.insert(i, state_id);

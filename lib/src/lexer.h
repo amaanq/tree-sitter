@@ -34,6 +34,12 @@ typedef struct {
   bool did_get_column;
   ColumnData column_data;
 
+  // Anchor context tracking
+  bool at_start_of_text;
+  bool at_end_of_text;
+  bool at_start_of_line;
+  bool at_end_of_line;
+
   char debug_buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE];
 } Lexer;
 

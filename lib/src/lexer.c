@@ -73,7 +73,15 @@ static void ts_lexer__invalidate_column_data(Lexer *self) {
 // it has consumed all of its available ranges.
 static bool ts_lexer__eof(const TSLexer *_self) {
   Lexer *self = (Lexer *)_self;
-  return self->current_included_range_index == self->included_range_count;
+  bool is_eof = self->current_included_range_index == self->included_range_count;
+  if (is_eof) {
+    // Update anchor context flags when at EOF
+    self->data.at_end_of_text = true;
+    self->data.at_end_of_line = true;
+    self->at_end_of_text = true;
+    self->at_end_of_line = true;
+  }
+  return is_eof;
 }
 
 // Clear the currently stored chunk of source code, because the lexer's
@@ -133,6 +141,10 @@ static void ts_lexer__get_lookahead(Lexer *self) {
   if (self->data.lookahead == TS_DECODE_ERROR) {
     self->lookahead_size = 1;
   }
+
+  // Update end-of-line context based on lookahead
+  self->data.at_end_of_line = (self->data.lookahead == '\n') || ts_lexer__eof(&self->data);
+  self->at_end_of_line = self->data.at_end_of_line;
 }
 
 static void ts_lexer_goto(Lexer *self, Length position) {
@@ -203,13 +215,22 @@ static void ts_lexer__do_advance(Lexer *self, bool skip) {
       self->current_position.extent.row++;
       self->current_position.extent.column = 0;
       ts_lexer__set_column_data(self, 0);
+      // After consuming a newline, we're at the start of the next line
+      self->data.at_start_of_line = true;
+      self->at_start_of_line = true;
     } else {
-      bool is_bom = self->current_position.bytes == 0 && 
+      bool is_bom = self->current_position.bytes == 0 &&
         self->data.lookahead == BYTE_ORDER_MARK;
       if (!is_bom) ts_lexer__increment_column_data(self);
       self->current_position.extent.column += self->lookahead_size;
+      // After consuming any non-newline character, we're no longer at start of line
+      self->data.at_start_of_line = false;
+      self->at_start_of_line = false;
     }
     self->current_position.bytes += self->lookahead_size;
+    // After consuming any character, we're no longer at start of text
+    self->data.at_start_of_text = false;
+    self->at_start_of_text = false;
   }
 
   const TSRange *current_range = &self->included_ranges[self->current_included_range_index];
@@ -360,6 +381,10 @@ void ts_lexer_init(Lexer *self) {
       .log = ts_lexer__log,
       .lookahead = 0,
       .result_symbol = 0,
+      .at_start_of_text = true,
+      .at_end_of_text = false,
+      .at_start_of_line = true,
+      .at_end_of_line = false,
     },
     .chunk = NULL,
     .chunk_size = 0,
@@ -376,7 +401,11 @@ void ts_lexer_init(Lexer *self) {
     .column_data = {
       .valid = false,
       .value = 0
-    }
+    },
+    .at_start_of_text = true,
+    .at_end_of_text = false,
+    .at_start_of_line = true,
+    .at_end_of_line = false
   };
   ts_lexer_set_included_ranges(self, NULL, 0);
 }
