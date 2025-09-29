@@ -2177,3 +2177,66 @@ fn test_grammar_that_should_hang_and_not_segfault() {
         }
     }
 }
+
+#[test]
+fn test_changed_ranges_for_property_identifier_changes() {
+    let mut parser = Parser::new();
+    parser.set_language(&get_language("javascript")).unwrap();
+
+    // Test case 1: f() -> f().
+    // This should include the entire line in changed ranges
+    let mut code1 = b"f()".to_vec();
+    let mut tree1 = parser.parse(&code1, None).unwrap();
+
+    perform_edit(
+        &mut tree1,
+        &mut code1,
+        &Edit {
+            position: 2,
+            deleted_length: 0,
+            inserted_text: b".".to_vec(),
+        },
+    )
+    .unwrap();
+
+    let tree2 = parser.parse(&code1, Some(&tree1)).unwrap();
+    let changed_ranges1: Vec<Range> = tree2.changed_ranges(&tree1).collect();
+
+    // The changed range should include the entire expression
+    println!("Changed ranges for f() -> f().: {:?}", changed_ranges1);
+    assert_eq!(changed_ranges1.len(), 1);
+    assert!(changed_ranges1[0].start_byte <= 2 && changed_ranges1[0].end_byte >= 3);
+
+    // Test case 2: f().a -> f().ab
+    // This should include the range of the property identifier
+    let mut code2 = b"f().a".to_vec();
+    let mut tree3 = parser.parse(&code2, None).unwrap();
+
+    perform_edit(
+        &mut tree3,
+        &mut code2,
+        &Edit {
+            position: 5,
+            deleted_length: 0,
+            inserted_text: b"b".to_vec(),
+        },
+    )
+    .unwrap();
+
+    let tree4 = parser.parse(&code2, Some(&tree3)).unwrap();
+    let changed_ranges2: Vec<Range> = tree4.changed_ranges(&tree3).collect();
+
+    // The changed range should include the modified property identifier
+    // Currently this test fails because changed_ranges is empty
+    println!("Changed ranges for f().a -> f().ab: {:?}", changed_ranges2);
+
+    // The property identifier 'a' is at byte position 4-5, and we're adding 'b' at position 5
+    // So the changed range should include position 4-6 (the modified property identifier)
+    if !changed_ranges2.is_empty() {
+        let range = &changed_ranges2[0];
+        assert!(range.start_byte <= 4 && range.end_byte >= 6);
+    } else {
+        // This is the bug - changed_ranges is empty when it should include the property identifier
+        panic!("Expected changed ranges to include the modified property identifier, but got empty ranges");
+    }
+}
