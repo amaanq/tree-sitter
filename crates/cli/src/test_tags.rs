@@ -1,13 +1,12 @@
 use std::{fs, path::Path};
 
-use anstyle::AnsiColor;
 use anyhow::{anyhow, Result};
 use tree_sitter_loader::{Config, Loader};
 use tree_sitter_tags::{TagsConfiguration, TagsContext};
 
 use crate::{
-    logger::paint,
     query_testing::{parse_position_comments, to_utf8_point, Assertion, Utf8Point},
+    test::{TestInfo, TestOutcome, TestResult, TestSummary},
     util,
 };
 
@@ -47,19 +46,7 @@ pub fn test_tags(
     loader_config: &Config,
     tags_context: &mut TagsContext,
     directory: &Path,
-    use_color: bool,
-) -> Result<()> {
-    println!("tags:");
-    test_tags_indented(loader, loader_config, tags_context, directory, use_color, 2)
-}
-
-pub fn test_tags_indented(
-    loader: &Loader,
-    loader_config: &Config,
-    tags_context: &mut TagsContext,
-    directory: &Path,
-    use_color: bool,
-    indent_level: usize,
+    test_summary: &mut TestSummary,
 ) -> Result<()> {
     let mut failed = false;
 
@@ -67,25 +54,25 @@ pub fn test_tags_indented(
         let tag_test_file = tag_test_file?;
         let test_file_path = tag_test_file.path();
         let test_file_name = tag_test_file.file_name();
-        print!(
-            "{indent:indent_level$}",
-            indent = "",
-            indent_level = indent_level * 2
-        );
         if test_file_path.is_dir() && test_file_path.read_dir()?.next().is_some() {
-            println!("{}:", test_file_name.to_string_lossy());
-            if test_tags_indented(
+            test_summary.tag_results.push(TestResult {
+                indent_level: test_summary.indent_level,
+                name: test_file_name.to_string_lossy().to_string(),
+                info: TestInfo::Group,
+            });
+            test_summary.indent_level += 1;
+            if test_tags(
                 loader,
                 loader_config,
                 tags_context,
                 &test_file_path,
-                use_color,
-                indent_level + 1,
+                test_summary,
             )
             .is_err()
             {
                 failed = true;
             }
+            test_summary.indent_level -= 1;
         } else {
             let (language, language_config) = loader
                 .language_configuration_for_file_name(&test_file_path)?
@@ -104,27 +91,26 @@ pub fn test_tags_indented(
                 fs::read(&test_file_path)?.as_slice(),
             ) {
                 Ok(assertion_count) => {
-                    println!(
-                        "✓ {} ({assertion_count} assertions)",
-                        paint(
-                            use_color.then_some(AnsiColor::Green),
-                            test_file_name.to_string_lossy().as_ref()
-                        ),
-                    );
+                    test_summary.tag_results.push(TestResult {
+                        indent_level: test_summary.indent_level,
+                        name: test_file_name.to_string_lossy().to_string(),
+                        info: TestInfo::AssertionTest {
+                            outcome: TestOutcome::AssertionPassed { assertion_count },
+                            test_num: test_summary.tag_results.len() + 1,
+                        },
+                    });
                 }
                 Err(e) => {
-                    println!(
-                        "✗ {}",
-                        paint(
-                            use_color.then_some(AnsiColor::Red),
-                            test_file_name.to_string_lossy().as_ref()
-                        )
-                    );
-                    println!(
-                        "{indent:indent_level$}  {e}",
-                        indent = "",
-                        indent_level = indent_level * 2
-                    );
+                    test_summary.tag_results.push(TestResult {
+                        indent_level: test_summary.indent_level,
+                        name: test_file_name.to_string_lossy().to_string(),
+                        info: TestInfo::AssertionTest {
+                            outcome: TestOutcome::AssertionFailed {
+                                error: e.to_string(),
+                            },
+                            test_num: test_summary.tag_results.len() + 1,
+                        },
+                    });
                     failed = true;
                 }
             }
