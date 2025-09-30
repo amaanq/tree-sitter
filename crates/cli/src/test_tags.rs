@@ -55,11 +55,11 @@ pub fn test_tags(
         let test_file_path = tag_test_file.path();
         let test_file_name = tag_test_file.file_name();
         if test_file_path.is_dir() && test_file_path.read_dir()?.next().is_some() {
-            test_summary.tag_results.push(TestResult {
-                indent_level: test_summary.indent_level,
-                name: test_file_name.to_string_lossy().to_string(),
-                info: TestInfo::Group,
-            });
+            // test_summary.tag_results.push(TestResult {
+            //     indent_level: test_summary.indent_level,
+            //     name: test_file_name.to_string_lossy().to_string(),
+            //     info: TestInfo::Group,
+            // });
             test_summary.indent_level += 1;
             if test_tags(
                 loader,

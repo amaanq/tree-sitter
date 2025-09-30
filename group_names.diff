@@ -1,0 +1,294 @@
+diff --git a/crates/cli/src/main.rs b/crates/cli/src/main.rs
+index a26c3cd8..c9524387 100644
+--- a/crates/cli/src/main.rs
++++ b/crates/cli/src/main.rs
+@@ -1359,7 +1359,9 @@ impl Test {
+                     test_summary.query_results.push(TestResult {
+                         indent_level: 0,
+                         name: stem.to_string(),
+-                        info: TestInfo::Group,
++                        info: TestInfo::Group {
++                            group_name: test_summary.curr_group_name.clone(),
++                        },
+                     });
+                 }
+ 
+diff --git a/crates/cli/src/query.rs b/crates/cli/src/query.rs
+index bb7da707..3e4a9447 100644
+--- a/crates/cli/src/query.rs
++++ b/crates/cli/src/query.rs
+@@ -138,6 +138,7 @@ pub fn query_file_at_path(
+                     info: TestInfo::AssertionTest {
+                         outcome: TestOutcome::AssertionPassed { assertion_count },
+                         test_num: test_summary.query_results.len() + 1,
++                        group_name: test_summary.curr_group_name.clone(),
+                     },
+                 });
+             }
+@@ -150,6 +151,7 @@ pub fn query_file_at_path(
+                             error: e.to_string(),
+                         },
+                         test_num: test_summary.query_results.len() + 1,
++                        group_name: test_summary.curr_group_name.clone(),
+                     },
+                 });
+                 return Err(e);
+diff --git a/crates/cli/src/test.rs b/crates/cli/src/test.rs
+index 834b8b57..db45621b 100644
+--- a/crates/cli/src/test.rs
++++ b/crates/cli/src/test.rs
+@@ -154,6 +154,8 @@ pub struct TestSummary {
+     pub parse_stat_display: TestStats,
+     #[serde(skip)]
+     pub parse_test_num: usize,
++    #[serde(skip)]
++    pub curr_group_name: String,
+ 
+     // Other test results
+     pub highlight_results: Vec<TestResult>,
+@@ -202,16 +204,23 @@ pub struct TestResult {
+ 
+ #[derive(Debug, Serialize)]
+ pub enum TestInfo {
+-    Group,
++    Group {
++        #[serde(skip_serializing_if = "String::is_empty")]
++        group_name: String,
++    },
+     ParseTest {
+         outcome: TestOutcome,
+         // True parse rate, adjusted parse rate
+         parse_rate: Option<(f64, f64)>,
+         test_num: usize,
++        #[serde(skip_serializing_if = "String::is_empty")]
++        group_name: String,
+     },
+     AssertionTest {
+         outcome: TestOutcome,
+         test_num: usize,
++        #[serde(skip_serializing_if = "String::is_empty")]
++        group_name: String,
+     },
+ }
+ 
+@@ -235,7 +244,7 @@ impl TestSummary {
+             .parse_results
+             .iter()
+             .filter_map(|result| match result.info {
+-                TestInfo::Group => None,
++                TestInfo::Group { .. } => None,
+                 TestInfo::ParseTest { parse_rate, .. } => parse_rate,
+                 _ => unreachable!(),
+             })
+@@ -248,7 +257,7 @@ impl TestSummary {
+                 .parse_results
+                 .iter()
+                 .filter_map(|result| match result.info {
+-                    TestInfo::Group => None,
++                    TestInfo::Group { .. } => None,
+                     TestInfo::ParseTest { parse_rate, .. } => parse_rate,
+                     _ => unreachable!(),
+                 })
+@@ -261,11 +270,12 @@ impl TestSummary {
+         for entry in &self.parse_results {
+             write!(f, "{}", "  ".repeat(entry.indent_level))?;
+             match &entry.info {
+-                TestInfo::Group => writeln!(f, "{}:", entry.name)?,
++                TestInfo::Group { .. } => writeln!(f, "{}:", entry.name)?,
+                 TestInfo::ParseTest {
+                     outcome,
+                     parse_rate,
+                     test_num,
++                    ..
+                 } => {
+                     let (color, result_char) = match outcome {
+                         TestOutcome::Passed => (AnsiColor::Green, "✓"),
+@@ -397,8 +407,12 @@ impl std::fmt::Display for TestSummary {
+                 for entry in results {
+                     write!(f, "{}", "  ".repeat(entry.indent_level))?;
+                     match &entry.info {
+-                        TestInfo::Group => writeln!(f, "{}", entry.name)?,
+-                        TestInfo::AssertionTest { outcome, test_num } => match outcome {
++                        TestInfo::Group { .. } => writeln!(f, "{}", entry.name)?,
++                        TestInfo::AssertionTest {
++                            outcome,
++                            test_num,
++                            ..
++                        } => match outcome {
+                             TestOutcome::AssertionPassed { assertion_count } => writeln!(
+                                 f,
+                                 "{:>3}. ✓ {} ({assertion_count} assertions)",
+@@ -674,6 +688,7 @@ fn run_tests(
+                         outcome: TestOutcome::Skipped,
+                         parse_rate: None,
+                         test_num: test_summary.parse_test_num,
++                        group_name: test_summary.curr_group_name.clone(),
+                     },
+                 });
+                 test_summary.parse_test_num += 1;
+@@ -688,6 +703,7 @@ fn run_tests(
+                         outcome: TestOutcome::Platform,
+                         parse_rate: None,
+                         test_num: test_summary.parse_test_num,
++                        group_name: test_summary.curr_group_name.clone(),
+                     },
+                 });
+                 test_summary.parse_test_num += 1;
+@@ -726,6 +742,7 @@ fn run_tests(
+                                 outcome: TestOutcome::Passed,
+                                 parse_rate,
+                                 test_num: test_summary.parse_test_num,
++                                group_name: test_summary.curr_group_name.clone(),
+                             },
+                         });
+                         test_summary.parse_stats.successful_parses += 1;
+@@ -770,6 +787,7 @@ fn run_tests(
+                                 outcome: TestOutcome::Failed,
+                                 parse_rate,
+                                 test_num: test_summary.parse_test_num,
++                                group_name: test_summary.curr_group_name.clone(),
+                             },
+                         });
+                         let actual = if attributes.cst {
+@@ -806,6 +824,7 @@ fn run_tests(
+                                 outcome: TestOutcome::Passed,
+                                 parse_rate,
+                                 test_num: test_summary.parse_test_num,
++                                group_name: test_summary.curr_group_name.clone(),
+                             },
+                         });
+                         test_summary.parse_stats.successful_parses += 1;
+@@ -867,6 +886,7 @@ fn run_tests(
+                                         outcome: TestOutcome::Updated,
+                                         parse_rate,
+                                         test_num: test_summary.parse_test_num,
++                                        group_name: test_summary.curr_group_name.clone(),
+                                     },
+                                 });
+                             }
+@@ -878,6 +898,7 @@ fn run_tests(
+                                     outcome: TestOutcome::Failed,
+                                     parse_rate,
+                                     test_num: test_summary.parse_test_num,
++                                    group_name: test_summary.curr_group_name.clone(),
+                                 },
+                             });
+                         }
+@@ -960,19 +981,25 @@ fn run_tests(
+                     }
+                 }
+                 if !ran_test_in_group && test_summary.indent_level > 0 {
++                    println!("Current test group name: {}", test_summary.curr_group_name);
+                     ran_test_in_group = true;
+                     test_summary.parse_results.push(TestResult {
+                         indent_level: test_summary.indent_level,
+                         name: name.clone(),
+-                        info: TestInfo::Group,
++                        info: TestInfo::Group {
++                            group_name: test_summary.curr_group_name.clone(),
++                        },
+                     });
+                 }
++                let old_group_name = test_summary.curr_group_name.clone();
++                test_summary.curr_group_name = name.clone();
+                 test_summary.indent_level += 1;
+                 if !run_tests(parser, child, opts, test_summary, corrected_entries)? {
+                     // fail fast
+                     return Ok(false);
+                 }
+                 test_summary.indent_level -= 1;
++                test_summary.curr_group_name = old_group_name;
+             }
+ 
+             if let Some(file_path) = file_path {
+diff --git a/crates/cli/src/test_highlight.rs b/crates/cli/src/test_highlight.rs
+index 833667ad..ddaa5eba 100644
+--- a/crates/cli/src/test_highlight.rs
++++ b/crates/cli/src/test_highlight.rs
+@@ -56,11 +56,16 @@ pub fn test_highlights(
+         let test_file_path = highlight_test_file.path();
+         let test_file_name = highlight_test_file.file_name();
+         if test_file_path.is_dir() && test_file_path.read_dir()?.next().is_some() {
++            let new_group_name = test_file_name.to_string_lossy().to_string();
+             test_summary.highlight_results.push(TestResult {
+                 indent_level: test_summary.indent_level,
+-                name: test_file_name.to_string_lossy().to_string(),
+-                info: TestInfo::Group,
++                name: new_group_name.clone(),
++                info: TestInfo::Group {
++                    group_name: test_summary.curr_group_name.clone(),
++                },
+             });
++            let old_group_name = test_summary.curr_group_name.clone();
++            test_summary.curr_group_name = new_group_name;
+             test_summary.indent_level += 1;
+             if test_highlights(
+                 loader,
+@@ -74,6 +79,7 @@ pub fn test_highlights(
+                 failed = true;
+             }
+             test_summary.indent_level -= 1;
++            test_summary.curr_group_name = old_group_name;
+         } else {
+             let (language, language_config) = loader
+                 .language_configuration_for_file_name(&test_file_path)?
+@@ -99,6 +105,7 @@ pub fn test_highlights(
+                         info: TestInfo::AssertionTest {
+                             outcome: TestOutcome::AssertionPassed { assertion_count },
+                             test_num: test_summary.highlight_results.len() + 1,
++                            group_name: test_summary.curr_group_name.clone(),
+                         },
+                     });
+                 }
+@@ -111,6 +118,7 @@ pub fn test_highlights(
+                                 error: e.to_string(),
+                             },
+                             test_num: test_summary.highlight_results.len() + 1,
++                            group_name: test_summary.curr_group_name.clone(),
+                         },
+                     });
+                     failed = true;
+diff --git a/crates/cli/src/test_tags.rs b/crates/cli/src/test_tags.rs
+index efd629ac..c1f55c83 100644
+--- a/crates/cli/src/test_tags.rs
++++ b/crates/cli/src/test_tags.rs
+@@ -55,10 +55,14 @@ pub fn test_tags(
+         let test_file_path = tag_test_file.path();
+         let test_file_name = tag_test_file.file_name();
+         if test_file_path.is_dir() && test_file_path.read_dir()?.next().is_some() {
++            let old_group_name = test_summary.curr_group_name.clone();
++            test_summary.curr_group_name = test_file_name.to_string_lossy().to_string();
+             test_summary.tag_results.push(TestResult {
+                 indent_level: test_summary.indent_level,
+                 name: test_file_name.to_string_lossy().to_string(),
+-                info: TestInfo::Group,
++                info: TestInfo::Group {
++                    group_name: test_summary.curr_group_name.clone(),
++                },
+             });
+             test_summary.indent_level += 1;
+             if test_tags(
+@@ -72,6 +76,7 @@ pub fn test_tags(
+             {
+                 failed = true;
+             }
++            test_summary.curr_group_name = old_group_name;
+             test_summary.indent_level -= 1;
+         } else {
+             let (language, language_config) = loader
+@@ -97,6 +102,7 @@ pub fn test_tags(
+                         info: TestInfo::AssertionTest {
+                             outcome: TestOutcome::AssertionPassed { assertion_count },
+                             test_num: test_summary.tag_results.len() + 1,
++                            group_name: test_summary.curr_group_name.clone(),
+                         },
+                     });
+                 }
+@@ -109,6 +115,7 @@ pub fn test_tags(
+                                 error: e.to_string(),
+                             },
+                             test_num: test_summary.tag_results.len() + 1,
++                            group_name: test_summary.curr_group_name.clone(),
+                         },
+                     });
+                     failed = true;

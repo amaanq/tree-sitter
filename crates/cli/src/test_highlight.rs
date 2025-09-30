@@ -56,11 +56,12 @@ pub fn test_highlights(
         let test_file_path = highlight_test_file.path();
         let test_file_name = highlight_test_file.file_name();
         if test_file_path.is_dir() && test_file_path.read_dir()?.next().is_some() {
-            test_summary.highlight_results.push(TestResult {
-                indent_level: test_summary.indent_level,
-                name: test_file_name.to_string_lossy().to_string(),
-                info: TestInfo::Group,
-            });
+            let new_group_name = test_file_name.to_string_lossy().to_string();
+            // test_summary.highlight_results.push(TestResult {
+            //     indent_level: test_summary.indent_level,
+            //     name: new_group_name.clone(),
+            //     info: TestInfo::Group,
+            // });
             test_summary.indent_level += 1;
             if test_highlights(
                 loader,

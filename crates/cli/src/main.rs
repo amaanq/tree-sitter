@@ -1193,20 +1193,24 @@ impl Parse {
 
 /// In case an error is encountered, prints out the contents of `test_summary` and
 /// propagates the error
-macro_rules! check_test {
-    ($test_fn:expr, $test_summary:expr, $json:expr $(,)?) => {
-        if let Err(e) = $test_fn {
-            if $json {
-                let json_summary = serde_json::to_string_pretty($test_summary)
-                    .expect("Failed to encode summary to JSON");
-                println!("{json_summary}");
-            } else {
-                println!("{}", $test_summary);
-            }
-
-            Err(e)?
+fn check_test(
+    test_result: Result<()>,
+    test_summary: &TestSummary,
+    json_summary: bool,
+) -> Result<()> {
+    if let Err(e) = test_result {
+        if json_summary {
+            let json_summary = serde_json::to_string_pretty(test_summary)
+                .expect("Failed to encode summary to JSON");
+            println!("{json_summary}");
+        } else {
+            println!("{test_summary}");
         }
-    };
+
+        Err(e)?
+    }
+
+    Ok(())
 }
 
 impl Test {
@@ -1279,20 +1283,20 @@ impl Test {
                 overview_only: self.overview_only,
             };
 
-            check_test!(
+            check_test(
                 test::run_tests_at_path(&mut parser, &opts, &mut test_summary),
                 &test_summary,
                 self.json_summary,
-            );
+            )?;
         }
 
         // Check that all of the queries are valid.
         let query_dir = current_dir.join("queries");
-        check_test!(
+        check_test(
             test::check_queries_at_path(language, &query_dir),
             &test_summary,
-            self.json_summary
-        );
+            self.json_summary,
+        )?;
 
         // Run the syntax highlighting tests.
         let test_highlight_dir = test_dir.join("highlight");
@@ -1300,7 +1304,7 @@ impl Test {
             let mut highlighter = Highlighter::new();
             test_summary.indent_level = 2;
             highlighter.parser = parser;
-            check_test!(
+            check_test(
                 test_highlight::test_highlights(
                     &loader,
                     &config.get()?,
@@ -1310,7 +1314,7 @@ impl Test {
                 ),
                 &test_summary,
                 self.json_summary,
-            );
+            )?;
             parser = highlighter.parser;
         }
 
@@ -1319,7 +1323,7 @@ impl Test {
             let mut tags_context = TagsContext::new();
             tags_context.parser = parser;
             test_summary.indent_level = 2;
-            check_test!(
+            check_test(
                 test_tags::test_tags(
                     &loader,
                     &config.get()?,
@@ -1329,7 +1333,7 @@ impl Test {
                 ),
                 &test_summary,
                 self.json_summary,
-            );
+            )?;
         }
 
         // For the rest of the queries, find their tests and run them
@@ -1356,18 +1360,18 @@ impl Test {
                     })
                     .collect::<Vec<_>>();
                 if !entries.is_empty() {
-                    test_summary.query_results.push(TestResult {
-                        indent_level: 0,
-                        name: stem.to_string(),
-                        info: TestInfo::Group,
-                    });
+                    // test_summary.query_results.push(TestResult {
+                    //     indent_level: 0,
+                    //     name: stem.to_string(),
+                    //     info: TestInfo::Group,
+                    // });
                 }
 
                 let opts = QueryFileOptions::default();
                 for entry in entries {
                     let path = entry.path();
                     test_summary.indent_level = 0;
-                    check_test!(
+                    check_test(
                         query::query_file_at_path(
                             language,
                             path,
@@ -1378,7 +1382,7 @@ impl Test {
                         ),
                         &test_summary,
                         self.json_summary,
-                    );
+                    )?;
                 }
             }
         }
