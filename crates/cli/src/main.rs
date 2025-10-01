@@ -27,7 +27,7 @@ use tree_sitter_cli::{
     playground,
     query::{self, QueryFileOptions},
     tags::{self, TagsOptions},
-    test::{self, TestInfo, TestOptions, TestResult, TestStats, TestSummary},
+    test::{self, TestOptions, TestStats, TestSummary},
     test_highlight, test_tags, util,
     version::{self, BumpLevel},
     wasm,
@@ -1207,7 +1207,7 @@ fn check_test(
             println!("{test_summary}");
         }
 
-        Err(e)?
+        Err(e)?;
     }
 
     Ok(())
@@ -1288,6 +1288,7 @@ impl Test {
                 &test_summary,
                 self.json_summary,
             )?;
+            test_summary.test_num = 1;
         }
 
         // Check that all of the queries are valid.
@@ -1297,12 +1298,12 @@ impl Test {
             &test_summary,
             self.json_summary,
         )?;
+        test_summary.test_num = 1;
 
         // Run the syntax highlighting tests.
         let test_highlight_dir = test_dir.join("highlight");
         if test_highlight_dir.is_dir() {
             let mut highlighter = Highlighter::new();
-            test_summary.indent_level = 2;
             highlighter.parser = parser;
             check_test(
                 test_highlight::test_highlights(
@@ -1316,13 +1317,13 @@ impl Test {
                 self.json_summary,
             )?;
             parser = highlighter.parser;
+            test_summary.test_num = 1;
         }
 
         let test_tag_dir = test_dir.join("tags");
         if test_tag_dir.is_dir() {
             let mut tags_context = TagsContext::new();
             tags_context.parser = parser;
-            test_summary.indent_level = 2;
             check_test(
                 test_tags::test_tags(
                     &loader,
@@ -1334,6 +1335,7 @@ impl Test {
                 &test_summary,
                 self.json_summary,
             )?;
+            test_summary.test_num = 1;
         }
 
         // For the rest of the queries, find their tests and run them
@@ -1360,17 +1362,13 @@ impl Test {
                     })
                     .collect::<Vec<_>>();
                 if !entries.is_empty() {
-                    // test_summary.query_results.push(TestResult {
-                    //     indent_level: 0,
-                    //     name: stem.to_string(),
-                    //     info: TestInfo::Group,
-                    // });
+                    test_summary.query_results.add_group(stem);
                 }
 
+                test_summary.test_num = 1;
                 let opts = QueryFileOptions::default();
-                for entry in entries {
+                for entry in &entries {
                     let path = entry.path();
-                    test_summary.indent_level = 0;
                     check_test(
                         query::query_file_at_path(
                             language,
@@ -1384,8 +1382,12 @@ impl Test {
                         self.json_summary,
                     )?;
                 }
+                if !entries.is_empty() {
+                    test_summary.query_results.pop_traversal();
+                }
             }
         }
+        test_summary.test_num = 1;
 
         if self.json_summary {
             let json_summary = serde_json::to_string_pretty(&test_summary)

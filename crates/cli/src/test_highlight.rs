@@ -56,13 +56,9 @@ pub fn test_highlights(
         let test_file_path = highlight_test_file.path();
         let test_file_name = highlight_test_file.file_name();
         if test_file_path.is_dir() && test_file_path.read_dir()?.next().is_some() {
-            let new_group_name = test_file_name.to_string_lossy().to_string();
-            // test_summary.highlight_results.push(TestResult {
-            //     indent_level: test_summary.indent_level,
-            //     name: new_group_name.clone(),
-            //     info: TestInfo::Group,
-            // });
-            test_summary.indent_level += 1;
+            test_summary
+                .highlight_results
+                .add_group(test_file_name.to_string_lossy().as_ref());
             if test_highlights(
                 loader,
                 loader_config,
@@ -74,7 +70,7 @@ pub fn test_highlights(
             {
                 failed = true;
             }
-            test_summary.indent_level -= 1;
+            test_summary.highlight_results.pop_traversal();
         } else {
             let (language, language_config) = loader
                 .language_configuration_for_file_name(&test_file_path)?
@@ -94,29 +90,28 @@ pub fn test_highlights(
                 fs::read(&test_file_path)?.as_slice(),
             ) {
                 Ok(assertion_count) => {
-                    test_summary.highlight_results.push(TestResult {
-                        indent_level: test_summary.indent_level,
+                    test_summary.highlight_results.add_example(TestResult {
                         name: test_file_name.to_string_lossy().to_string(),
                         info: TestInfo::AssertionTest {
                             outcome: TestOutcome::AssertionPassed { assertion_count },
-                            test_num: test_summary.highlight_results.len() + 1,
+                            test_num: test_summary.test_num,
                         },
                     });
                 }
                 Err(e) => {
-                    test_summary.highlight_results.push(TestResult {
-                        indent_level: test_summary.indent_level,
+                    test_summary.highlight_results.add_example(TestResult {
                         name: test_file_name.to_string_lossy().to_string(),
                         info: TestInfo::AssertionTest {
                             outcome: TestOutcome::AssertionFailed {
                                 error: e.to_string(),
                             },
-                            test_num: test_summary.highlight_results.len() + 1,
+                            test_num: test_summary.test_num,
                         },
                     });
                     failed = true;
                 }
             }
+            test_summary.test_num += 1;
         }
     }
 

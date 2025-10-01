@@ -132,24 +132,22 @@ pub fn query_file_at_path(
         let test_summary = test_summary.unwrap();
         match query_testing::assert_expected_captures(&results, path, &mut parser, language) {
             Ok(assertion_count) => {
-                test_summary.query_results.push(TestResult {
-                    indent_level: 1,
+                test_summary.query_results.add_example(TestResult {
                     name: path_name.to_string(),
                     info: TestInfo::AssertionTest {
                         outcome: TestOutcome::AssertionPassed { assertion_count },
-                        test_num: test_summary.query_results.len() + 1,
+                        test_num: test_summary.test_num,
                     },
                 });
             }
             Err(e) => {
-                test_summary.query_results.push(TestResult {
-                    indent_level: 1,
+                test_summary.query_results.add_example(TestResult {
                     name: path_name.to_string(),
                     info: TestInfo::AssertionTest {
                         outcome: TestOutcome::AssertionFailed {
                             error: e.to_string(),
                         },
-                        test_num: test_summary.query_results.len() + 1,
+                        test_num: test_summary.test_num,
                     },
                 });
                 return Err(e);
