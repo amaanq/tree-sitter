@@ -989,6 +989,8 @@ fn cst_render_node(
 
         if node.has_error() || node.is_error() {
             write!(out, "{}", paint(opts.parse_theme.error, "•"))?;
+        } else if node.has_changes() {
+            write!(out, "{}", paint(opts.parse_theme.field, "•"))?;
         }
 
         let kind_color = if node.is_error() {
