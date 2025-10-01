@@ -95,8 +95,6 @@ enum GenerationEmit {
     /// Generate `parser.c` and related files
     #[default]
     Parser,
-    /// Compile to a library
-    Lib,
 }
 
 #[derive(Args)]
@@ -862,9 +860,6 @@ impl Generate {
                         version.parse().expect("invalid abi version flag")
                     }
                 });
-        if self.build {
-            warn!("--build is deprecated, use --emit=lib instead");
-        }
 
         if let Err(err) = tree_sitter_generate::generate_parser_in_directory(
             current_dir,
@@ -889,7 +884,10 @@ impl Generate {
                 Err(anyhow!(err.to_string())).with_context(|| "Error when generating parser")?;
             }
         }
-        if self.emit == GenerationEmit::Lib || self.build {
+
+        if self.build {
+            warn!("--build is deprecated, use --emit=lib instead");
+
             if let Some(path) = self.libdir {
                 loader = loader::Loader::with_parser_lib_path(path);
             }
