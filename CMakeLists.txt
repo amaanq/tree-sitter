@@ -81,6 +81,10 @@ set_target_properties(tree-sitter
                       SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
                       DEFINE_SYMBOL "")
 
+if(WIN32 AND BUILD_SHARED_LIBS)
+  target_sources(tree-sitter PRIVATE "${PROJECT_SOURCE_DIR}/lib/src/tree_sitter.def")
+endif()
+
 target_compile_definitions(tree-sitter PRIVATE _POSIX_C_SOURCE=200112L _DEFAULT_SOURCE _BSD_SOURCE _DARWIN_C_SOURCE)
 
 include(GNUInstallDirs)

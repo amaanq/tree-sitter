@@ -20,14 +20,17 @@ pub fn build(b: *std.Build) !void {
         }),
     });
 
+    const is_windows = target.result.os.tag == .windows;
+    const c_flags: []const []const u8 = if (is_windows) &.{"-std=c11"} else &.{ "-std=c11", "-fvisibility=hidden" };
+
     lib.addCSourceFile(.{
         .file = b.path("src/parser.c"),
-        .flags = &.{"-std=c11"},
+        .flags = c_flags,
     });
     if (fileExists(b, "src/scanner.c")) {
         lib.addCSourceFile(.{
             .file = b.path("src/scanner.c"),
-            .flags = &.{"-std=c11"},
+            .flags = c_flags,
         });
     }
 

@@ -41,7 +41,7 @@ ifneq ($(findstring darwin,$(MACHINE)),)
 	LINKSHARED += -dynamiclib -Wl,-install_name,$(LIBDIR)/libtree-sitter.$(SOEXTVER)
 else ifneq ($(findstring mingw32,$(MACHINE)),)
 	SOEXT = dll
-	LINKSHARED += -s -shared -Wl,--out-implib,libtree-sitter.dll.a
+	LINKSHARED += -s -shared -Wl,--out-implib,libtree-sitter.dll.a lib/src/tree_sitter.def
 else
 	SOEXT = so
 	SOEXTVER_MAJOR = $(SOEXT).$(SONAME_MAJOR)

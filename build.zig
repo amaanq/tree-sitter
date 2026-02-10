@@ -19,10 +19,13 @@ pub fn build(b: *std.Build) !void {
         }),
     });
 
+    const is_windows = target.result.os.tag == .windows;
+    const c_flags: []const []const u8 = if (is_windows) &.{"-std=c11"} else &.{ "-std=c11", "-fvisibility=hidden" };
+
     if (amalgamated) {
         lib.addCSourceFile(.{
             .file = b.path("lib/src/lib.c"),
-            .flags = &.{"-std=c11"},
+            .flags = c_flags,
         });
     } else {
         const files = try findSourceFiles(b);
@@ -30,7 +33,7 @@ pub fn build(b: *std.Build) !void {
         lib.addCSourceFiles(.{
             .root = b.path("lib/src"),
             .files = files,
-            .flags = &.{"-std=c11"},
+            .flags = c_flags,
         });
     }
 
@@ -42,6 +45,10 @@ pub fn build(b: *std.Build) !void {
     lib.root_module.addCMacro("_DEFAULT_SOURCE", "");
     lib.root_module.addCMacro("_BSD_SOURCE", "");
     lib.root_module.addCMacro("_DARWIN_C_SOURCE", "");
+
+    if (shared and is_windows) {
+        lib.addWin32LinkerInput(b.path("lib/src/tree_sitter.def"));
+    }
 
     if (wasm) {
         if (b.lazyDependency(wasmtimeDep(target.result), .{})) |wasmtime| {

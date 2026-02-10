@@ -22,7 +22,7 @@ OBJS := $(patsubst %.c,%.o,$(PARSER) $(EXTRAS))
 
 # flags
 ARFLAGS ?= rcs
-override CFLAGS += -I$(SRC_DIR) -std=c11 -fPIC
+override CFLAGS += -I$(SRC_DIR) -std=c11 -fPIC -fvisibility=hidden
 
 # ABI versioning
 SONAME_MAJOR = $(shell sed -n 's/\#define LANGUAGE_VERSION //p' $(PARSER))
