@@ -844,6 +844,53 @@ fn test_node_is_error() {
 }
 
 #[test]
+fn test_node_has_error_implies_is_error() {
+    // Verify that is_error() always implies has_error() for all nodes in the tree.
+    // This tests the fix for https://github.com/tree-sitter/tree-sitter/issues/3623
+    // where terminal ERROR nodes (with no children) returned false for has_error().
+    fn assert_error_invariant(node: Node) {
+        if node.is_error() {
+            assert!(
+                node.has_error(),
+                "is_error() is true but has_error() is false for node: kind={}, \
+                 child_count={}, sexp={}",
+                node.kind(),
+                node.child_count(),
+                node.to_sexp()
+            );
+        }
+        for i in 0..node.child_count() {
+            assert_error_invariant(node.child(i).unwrap());
+        }
+    }
+
+    let mut parser = Parser::new();
+
+    let test_cases: Vec<(&str, Vec<&str>)> = vec![
+        (
+            "javascript",
+            vec!["}", "foo(", "foo bar }", "var = ;}", "((("],
+        ),
+        ("json", vec!["}", "]", "{]", "[}", "{ : }", "{,}", "[,]"]),
+        ("c", vec!["}", "int }", "int x = }", ";}"]),
+        ("python", vec![")", "]", "}", "def :"]),
+    ];
+
+    for (lang_name, inputs) in &test_cases {
+        parser.set_language(&get_language(lang_name)).unwrap();
+        for input in inputs {
+            let tree = parser.parse(input, None).unwrap();
+            let root = tree.root_node();
+            assert!(
+                root.has_error(),
+                "Expected parse error for {lang_name}: {input:?}"
+            );
+            assert_error_invariant(root);
+        }
+    }
+}
+
+#[test]
 fn test_edit_point() {
     let edit = InputEdit {
         start_byte: 5,

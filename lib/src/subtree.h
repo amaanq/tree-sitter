@@ -331,8 +331,14 @@ static inline uint32_t ts_subtree_visible_child_count(Subtree self) {
 static inline uint32_t ts_subtree_error_cost(Subtree self) {
   if (ts_subtree_missing(self)) {
     return ERROR_COST_PER_MISSING_TREE + ERROR_COST_PER_RECOVERY;
+  } else if (self.data.is_inline) {
+    return 0;
+  } else if (self.ptr->child_count == 0 && ts_subtree_symbol(self) == ts_builtin_sym_error) {
+    return ERROR_COST_PER_RECOVERY +
+      ERROR_COST_PER_SKIPPED_CHAR * self.ptr->size.bytes +
+      ERROR_COST_PER_SKIPPED_LINE * self.ptr->size.extent.row;
   } else {
-    return self.data.is_inline ? 0 : self.ptr->error_cost;
+    return self.ptr->error_cost;
   }
 }
 
