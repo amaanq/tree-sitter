@@ -606,6 +606,36 @@ fn test_query_errors_on_impossible_patterns() {
 }
 
 #[test]
+fn test_query_alternation_structure_check_is_order_independent() {
+    let language = get_language("javascript");
+
+    allocations::record(|| {
+        // Both orderings should fail because `object` is not a valid child
+        // of `function_declaration`.
+        assert!(Query::new(&language, "(function_declaration [(identifier) (object)])").is_err());
+        assert!(Query::new(&language, "(function_declaration [(object) (identifier)])").is_err());
+
+        // All branches invalid should still fail.
+        assert!(Query::new(&language, "(function_declaration [(object) (array)])").is_err());
+
+        // All branches valid should pass.
+        Query::new(
+            &language,
+            "(function_declaration [(identifier) (statement_block)])",
+        )
+        .unwrap();
+
+        // Alternation not at the first child position.
+        // `object` is not a valid child of `function_declaration`.
+        assert!(Query::new(
+            &language,
+            "(function_declaration (identifier) [(statement_block) (object)])",
+        )
+        .is_err());
+    });
+}
+
+#[test]
 fn test_query_verifies_possible_patterns_with_aliased_parent_nodes() {
     allocations::record(|| {
         let language = get_language("ruby");

@@ -253,6 +253,7 @@ typedef struct {
   AnalysisStateSet state_pool;
   Array(uint16_t) final_step_indices;
   Array(TSSymbol) finished_parent_symbols;
+  Array(uint16_t) matched_step_indices;
   bool did_abort;
 } QueryAnalysis;
 
@@ -1041,6 +1042,7 @@ static inline QueryAnalysis query_analysis__new(void) {
     .state_pool = array_new(),
     .final_step_indices = array_new(),
     .finished_parent_symbols = array_new(),
+    .matched_step_indices = array_new(),
     .did_abort = false,
   };
 }
@@ -1052,6 +1054,7 @@ static inline void query_analysis__delete(QueryAnalysis *self) {
   analysis_state_set__delete(&self->state_pool);
   array_delete(&self->final_step_indices);
   array_delete(&self->finished_parent_symbols);
+  array_delete(&self->matched_step_indices);
 }
 
 /***********************
@@ -1166,6 +1169,7 @@ static void ts_query__perform_analysis(
   unsigned prev_final_step_count = 0;
   array_clear(&analysis->final_step_indices);
   array_clear(&analysis->finished_parent_symbols);
+  array_clear(&analysis->matched_step_indices);
 
   for (unsigned iteration = 0;; iteration++) {
     if (iteration == MAX_ANALYSIS_ITERATION_COUNT) {
@@ -1259,6 +1263,39 @@ static void ts_query__perform_analysis(
       const TSFieldId parent_field_id = analysis_state__top(state)->field_id;
       const unsigned child_index = analysis_state__top(state)->child_index;
       const QueryStep * const step = array_get(&self->steps, state->step_index);
+
+      // If the current step is the start of an alternation branch, ensure all
+      // alternative branches are also explored independently. During query
+      // execution, alternatives are always split (each branch gets its own
+      // state). The analysis must do the same, otherwise alternation validation
+      // becomes order-dependent: `["x" (y)]` would fail while `[(y) "x"]`
+      // would pass, even though both are semantically equivalent.
+      //
+      // Only follow alternatives that point to steps at the same depth (true
+      // alternation branches). The `?` and `*` suffixes also set alternative_index,
+      // but those point to steps at a different depth or past the pattern, which
+      // are not alternation branches.
+      if (
+        step->alternative_index != NONE &&
+        step->alternative_index > state->step_index &&
+        step->alternative_index < self->steps.size &&
+        !step->is_dead_end &&
+        !step->is_pass_through
+      ) {
+        const QueryStep *alt_step = array_get(&self->steps, step->alternative_index);
+        if (
+          alt_step->depth == step->depth &&
+          alt_step->depth != PATTERN_DONE_MARKER
+        ) {
+          AnalysisState alt_state = *state;
+          alt_state.step_index = step->alternative_index;
+          analysis_state_set__insert_sorted(
+            &analysis->next_states,
+            &analysis->state_pool,
+            &alt_state
+          );
+        }
+      }
 
       unsigned subgraph_index, exists;
       array_search_sorted_by(subgraphs, .symbol, parent_symbol, &subgraph_index, &exists);
@@ -1404,6 +1441,7 @@ static void ts_query__perform_analysis(
           // over any descendant steps of the current child.
           const QueryStep *next_step = step;
           if (does_match) {
+            array_insert_sorted_by(&analysis->matched_step_indices, , state->step_index);
             for (;;) {
               next_state.step_index++;
               next_step = array_get(&self->steps, next_state.step_index);
@@ -1807,6 +1845,71 @@ static bool ts_query__analyze_patterns(TSQuery *self, unsigned *error_offset) {
       *error_offset = array_get(&self->step_offsets, j)->byte_offset;
       all_patterns_are_valid = false;
       break;
+    }
+
+    // Validate each alternation branch independently. Walk child steps to
+    // find alternation positions, then verify each branch was matched during
+    // the analysis. An unmatched branch indicates an impossible node type,
+    // which is almost certainly a user mistake.
+    {
+      uint16_t child_depth = parent_depth + 1;
+      for (unsigned j = parent_step_index + 1; j < self->steps.size; j++) {
+        QueryStep *child_step = array_get(&self->steps, j);
+        if (child_step->depth <= parent_depth || child_step->depth == PATTERN_DONE_MARKER) break;
+        if (child_step->depth != child_depth) continue;
+        if (child_step->is_dead_end || child_step->is_pass_through) continue;
+
+        // Check if this step is an alternation branch start. A [...] alternation
+        // places a dead_end placeholder step at the end of each non-last branch,
+        // which is at `alternative_index - 1`. Quantifiers (?, *, +) also set
+        // alternative_index but do NOT insert a dead_end placeholder.
+        if (
+          child_step->alternative_index == NONE ||
+          child_step->alternative_index <= j ||
+          child_step->alternative_index >= self->steps.size
+        ) continue;
+        const QueryStep *alt = array_get(&self->steps, child_step->alternative_index);
+        if (alt->depth != child_depth) continue;
+        const QueryStep *pre_alt = array_get(&self->steps, child_step->alternative_index - 1);
+        if (!pre_alt->is_dead_end) continue;
+
+        // This step is the start of an alternation. Enumerate and validate
+        // each branch.
+        uint16_t branch_idx = j;
+        while (true) {
+          unsigned found_index, found;
+          array_search_sorted_by(
+            &analysis.matched_step_indices, , branch_idx,
+            &found_index, &found
+          );
+          if (!found) {
+            uint32_t k, offset_exists;
+            array_search_sorted_by(
+              &self->step_offsets, .step_index, branch_idx,
+              &k, &offset_exists
+            );
+            if (k >= self->step_offsets.size) k = self->step_offsets.size - 1;
+            *error_offset = array_get(&self->step_offsets, k)->byte_offset;
+            all_patterns_are_valid = false;
+            break;
+          }
+
+          QueryStep *branch_step = array_get(&self->steps, branch_idx);
+          if (
+            branch_step->alternative_index == NONE ||
+            branch_step->alternative_index <= branch_idx ||
+            branch_step->alternative_index >= self->steps.size ||
+            branch_step->is_dead_end ||
+            branch_step->is_pass_through
+          ) break;
+          const QueryStep *next = array_get(&self->steps, branch_step->alternative_index);
+          if (next->depth != child_depth) break;
+          branch_idx = branch_step->alternative_index;
+        }
+
+        if (!all_patterns_are_valid) break;
+      }
+      if (!all_patterns_are_valid) break;
     }
 
     // Mark as fallible any step where a match terminated.
