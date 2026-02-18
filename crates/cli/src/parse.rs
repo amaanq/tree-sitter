@@ -278,6 +278,74 @@ pub struct ParseResult {
     pub duration: Option<Duration>,
 }
 
+/// Walk the visible syntax tree from `root` and return the first node that
+/// represents an error, in order of preference:
+///
+/// 1. A visible `ERROR` or `MISSING` node found by depth-first cursor walk.
+/// 2. A visible sibling of a hidden error, found by walking up to the first
+///    node with an error and then scanning its visible children.
+/// 3. The deepest visible node whose `has_error()` is true but whose error is
+///    entirely in a hidden descendant (e.g. a MISSING node for a hidden regex
+///    rule). These are never reachable through the normal cursor API because
+///    the tree cursor skips invisible nodes.
+pub(crate) fn find_first_error<'a>(root: tree_sitter::Node<'a>) -> Option<tree_sitter::Node<'a>> {
+    let mut cursor = root.walk();
+    let mut first_error = None;
+    let mut earliest_node_with_error = None;
+    let mut hidden_error_node = None;
+    'outer: loop {
+        let node = cursor.node();
+        if node.has_error() {
+            if earliest_node_with_error.is_none() {
+                earliest_node_with_error = Some(node);
+            }
+            if node.is_error() || node.is_missing() {
+                first_error = Some(node);
+                break;
+            }
+
+            // Track the deepest visible node whose error is in a hidden
+            // descendant (e.g. a MISSING node for a hidden rule). The last
+            // assignment wins, giving us the innermost candidate.
+            hidden_error_node = Some(node);
+
+            // If there's no more children, even though some outer node has an error,
+            // then that means that the first error is hidden, but the later error could be
+            // visible. So, we walk back up to the child of the first node with an error,
+            // and then check its siblings for errors.
+            if !cursor.goto_first_child() {
+                let earliest = earliest_node_with_error.unwrap();
+                while cursor.goto_parent() {
+                    if cursor.node().parent().is_some_and(|p| p == earliest) {
+                        while cursor.goto_next_sibling() {
+                            let sibling = cursor.node();
+                            if sibling.is_error() || sibling.is_missing() {
+                                first_error = Some(sibling);
+                                break 'outer;
+                            }
+                            if sibling.has_error() && cursor.goto_first_child() {
+                                continue 'outer;
+                            }
+                        }
+                        break;
+                    }
+                }
+                break;
+            }
+        } else if !cursor.goto_next_sibling() {
+            break;
+        }
+    }
+
+    // If no visible ERROR or MISSING node was found, but a visible node
+    // contained a hidden error (e.g. a MISSING node for a hidden regex
+    // rule), report that node's position as having a missing token.
+    if first_error.is_none() {
+        first_error = hidden_error_node;
+    }
+    first_error
+}
+
 pub fn parse_file_at_path(
     parser: &mut Parser,
     language: &Language,
@@ -627,46 +695,7 @@ pub fn parse_file_at_path(
             util::print_tree_graph(&tree, "log.html", opts.open_log).unwrap();
         }
 
-        let mut first_error = None;
-        let mut earliest_node_with_error = None;
-        'outer: loop {
-            let node = cursor.node();
-            if node.has_error() {
-                if earliest_node_with_error.is_none() {
-                    earliest_node_with_error = Some(node);
-                }
-                if node.is_error() || node.is_missing() {
-                    first_error = Some(node);
-                    break;
-                }
-
-                // If there's no more children, even though some outer node has an error,
-                // then that means that the first error is hidden, but the later error could be
-                // visible. So, we walk back up to the child of the first node with an error,
-                // and then check its siblings for errors.
-                if !cursor.goto_first_child() {
-                    let earliest = earliest_node_with_error.unwrap();
-                    while cursor.goto_parent() {
-                        if cursor.node().parent().is_some_and(|p| p == earliest) {
-                            while cursor.goto_next_sibling() {
-                                let sibling = cursor.node();
-                                if sibling.is_error() || sibling.is_missing() {
-                                    first_error = Some(sibling);
-                                    break 'outer;
-                                }
-                                if sibling.has_error() && cursor.goto_first_child() {
-                                    continue 'outer;
-                                }
-                            }
-                            break;
-                        }
-                    }
-                    break;
-                }
-            } else if !cursor.goto_next_sibling() {
-                break;
-            }
-        }
+        let first_error = find_first_error(cursor.node());
 
         if first_error.is_some() || opts.print_time {
             let path = path.to_string_lossy();
@@ -694,8 +723,14 @@ pub fn parse_file_at_path(
                     } else {
                         write!(&mut stdout, "MISSING \"{node_text}\"")?;
                     }
-                } else {
+                } else if node.is_error() {
                     write!(&mut stdout, "{node_text}")?;
+                } else {
+                    // The actual error is a hidden MISSING descendant
+                    // (e.g. a regex token from a hidden rule). Report the
+                    // position without a symbol name since the missing
+                    // token's identity is not exposed in the public API.
+                    write!(&mut stdout, "MISSING")?;
                 }
 
                 let start = node.start_position();

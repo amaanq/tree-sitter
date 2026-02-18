@@ -21,7 +21,7 @@ use super::helpers::{
 };
 use crate::{
     fuzz::edits::Edit,
-    parse::perform_edit,
+    parse::{find_first_error, perform_edit},
     tests::{
         generate_parser,
         helpers::fixtures::{fixtures_dir, get_test_fixture_language},
@@ -2176,4 +2176,55 @@ fn test_grammar_that_should_hang_and_not_segfault() {
             panic!("The test thread disconnected unexpectedly")
         }
     }
+}
+
+#[test]
+fn test_find_first_error_detects_hidden_missing_node() {
+    // When a hidden rule wraps a regex token, the MISSING node inherits the
+    // hidden rule's `visible=false` flag and the tree cursor can never reach
+    // it. `find_first_error` must still surface the enclosing visible node so
+    // that the parse command's error summary is not silently empty.
+    //
+    // Grammar: source_file -> "." id, id -> _id, _id -> /[A-Za-z0-9_]+/
+    let (parser_name, parser_code) = generate_parser(
+        r#"{
+            "name": "test_hidden_missing",
+            "rules": {
+                "source_file": {
+                    "type": "SEQ",
+                    "members": [
+                        {"type": "STRING", "value": "."},
+                        {"type": "SYMBOL", "name": "id"}
+                    ]
+                },
+                "id":  {"type": "SYMBOL",  "name": "_id"},
+                "_id": {"type": "PATTERN", "value": "[A-Za-z0-9_]+"}
+            },
+            "extras": [{"type": "PATTERN", "value": "\\s"}]
+        }"#,
+    )
+    .unwrap();
+
+    let mut parser = Parser::new();
+    parser
+        .set_language(&get_test_language(&parser_name, &parser_code, None))
+        .unwrap();
+
+    // ".\n" has no identifier after the dot, so _id is MISSING.
+    let tree = parser.parse(".\n", None).unwrap();
+    let root = tree.root_node();
+
+    // Sanity check: the tree does have an error.
+    assert!(root.has_error(), "tree: {}", root.to_sexp());
+
+    // `find_first_error` must return Some — specifically the `id` wrapper node
+    // — even though the actual MISSING node is its hidden `_id` child and is
+    // invisible to the normal cursor API.
+    let first_error = find_first_error(root);
+    assert!(
+        first_error.is_some(),
+        "find_first_error returned None for a tree with a hidden MISSING node: {}",
+        root.to_sexp(),
+    );
+    assert_eq!(first_error.unwrap().kind(), "id");
 }
