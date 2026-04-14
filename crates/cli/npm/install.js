@@ -25,6 +25,7 @@ const matrix = {
         'x64': { name: 'x64' },
         'x86': { name: 'x86' },
         'ppc64': { name: 'powerpc64' },
+        'riscv64': { name: 'riscv64' },
       }
     },
     'win32': {
